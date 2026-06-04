@@ -11,7 +11,7 @@
 目前包含的核心資料表例如：
 
 - `users`：使用者帳號資料，包含 LOCAL / GOOGLE 登入來源、角色、狀態等欄位
-- `categories`：活動與攤位分類
+- `categories`：活動與攤位共用分類，不再用 `type` 區分分類用途
 - `vendors`：攤位資料
 - `vendor_images`：攤位圖片
 - `vendor_products`：攤位商品
@@ -45,6 +45,16 @@
 
 建議在執行完 `MarketDayDB.sql` 建立資料表後，再執行 `test.sql`。
 
+### `categories.sql`
+
+`categories.sql` 放置前台分類篩選會使用的共用分類資料，包含：
+
+```text
+餐飲美食、文創手作、親子家庭、寵物生活、植物選物、服飾配件、玩具選物
+```
+
+建議在執行完 `MarketDayDB.sql` 建立資料表後，再執行 `categories.sql`。
+
 ### `dropDB.sql`
 
 `dropDB.sql` 用於刪除或重建資料庫前的清理作業。
@@ -57,7 +67,8 @@
 
 ```text
 1. MarketDayDB.sql
-2. test.sql
+2. categories.sql
+3. test.sql
 ```
 
 需要重新建立資料庫：
@@ -65,7 +76,8 @@
 ```text
 1. dropDB.sql
 2. MarketDayDB.sql
-3. test.sql
+3. categories.sql
+4. test.sql
 ```
 
 ## 與後端程式的關聯

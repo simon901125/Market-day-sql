@@ -12,7 +12,8 @@ GO
    Source: 資料庫規劃.md
    ========================================================= */
 
-CREATE TABLE dbo.users (
+CREATE TABLE dbo.users
+(
     id BIGINT IDENTITY(1,1) NOT NULL,
     role VARCHAR(30) NOT NULL,
     name NVARCHAR(100) NOT NULL,
@@ -35,19 +36,19 @@ CREATE INDEX IX_users_role_status ON dbo.users(role, status);
 CREATE INDEX IX_users_provider ON dbo.users(provider);
 GO
 
-CREATE TABLE dbo.categories (
+CREATE TABLE dbo.categories
+(
     id BIGINT IDENTITY(1,1) NOT NULL,
-    type NVARCHAR(30) NOT NULL,
     name NVARCHAR(100) NOT NULL,
     slug NVARCHAR(100) NOT NULL,
     is_active BIT NOT NULL CONSTRAINT DF_categories_is_active DEFAULT 1,
     CONSTRAINT PK_categories PRIMARY KEY (id),
-    CONSTRAINT UQ_categories_type_slug UNIQUE (type, slug),
-    CONSTRAINT CK_categories_type CHECK (type IN (N'EVENT', N'VENDOR'))
+    CONSTRAINT UQ_categories_slug UNIQUE (slug)
 );
 GO
 
-CREATE TABLE dbo.vendors (
+CREATE TABLE dbo.vendors
+(
     id BIGINT IDENTITY(1,1) NOT NULL,
     user_id BIGINT NOT NULL,
     category_id BIGINT NOT NULL,
@@ -70,7 +71,8 @@ GO
 CREATE INDEX IX_vendors_category_status ON dbo.vendors(category_id, status);
 GO
 
-CREATE TABLE dbo.vendor_images (
+CREATE TABLE dbo.vendor_images
+(
     id BIGINT IDENTITY(1,1) NOT NULL,
     vendor_id BIGINT NOT NULL,
     image_type NVARCHAR(30) NOT NULL,
@@ -85,7 +87,8 @@ CREATE INDEX IX_vendor_images_vendor_type ON dbo.vendor_images(vendor_id, image_
 CREATE UNIQUE INDEX UQ_vendor_images_main ON dbo.vendor_images(vendor_id) WHERE image_type = N'MAIN';
 GO
 
-CREATE TABLE dbo.vendor_products (
+CREATE TABLE dbo.vendor_products
+(
     id BIGINT IDENTITY(1,1) NOT NULL,
     vendor_id BIGINT NOT NULL,
     name NVARCHAR(150) NOT NULL,
@@ -100,7 +103,8 @@ CREATE TABLE dbo.vendor_products (
 );
 GO
 
-CREATE TABLE dbo.market_events (
+CREATE TABLE dbo.market_events
+(
     id BIGINT IDENTITY(1,1) NOT NULL,
     user_id BIGINT NOT NULL,
     category_id BIGINT NOT NULL,
@@ -140,7 +144,8 @@ CREATE INDEX IX_market_events_city_category ON dbo.market_events(city, category_
 CREATE INDEX IX_market_events_publish_status ON dbo.market_events(publish_status);
 GO
 
-CREATE TABLE dbo.event_sessions (
+CREATE TABLE dbo.event_sessions
+(
     id BIGINT IDENTITY(1,1) NOT NULL,
     event_id BIGINT NOT NULL,
     session_date DATE NOT NULL,
@@ -152,7 +157,8 @@ CREATE TABLE dbo.event_sessions (
 );
 GO
 
-CREATE TABLE dbo.event_images (
+CREATE TABLE dbo.event_images
+(
     id BIGINT IDENTITY(1,1) NOT NULL,
     event_id BIGINT NOT NULL,
     image_url NVARCHAR(500) NOT NULL,
@@ -161,7 +167,8 @@ CREATE TABLE dbo.event_images (
 );
 GO
 
-CREATE TABLE dbo.event_applications (
+CREATE TABLE dbo.event_applications
+(
     id BIGINT IDENTITY(1,1) NOT NULL,
     application_no NVARCHAR(30) NOT NULL,
     event_id BIGINT NOT NULL,
@@ -189,7 +196,8 @@ CREATE INDEX IX_event_applications_user ON dbo.event_applications(user_id);
 CREATE INDEX IX_event_applications_payment_due ON dbo.event_applications(payment_status, payment_due_at);
 GO
 
-CREATE TABLE dbo.application_sessions (
+CREATE TABLE dbo.application_sessions
+(
     id BIGINT IDENTITY(1,1) NOT NULL,
     application_id BIGINT NOT NULL,
     session_id BIGINT NOT NULL,
@@ -201,7 +209,8 @@ CREATE TABLE dbo.application_sessions (
 );
 GO
 
-CREATE TABLE dbo.payments (
+CREATE TABLE dbo.payments
+(
     id BIGINT IDENTITY(1,1) NOT NULL,
     payment_no NVARCHAR(40) NOT NULL,
     application_id BIGINT NOT NULL,
@@ -225,7 +234,8 @@ CREATE INDEX IX_payments_application ON dbo.payments(application_id);
 CREATE INDEX IX_payments_status ON dbo.payments(status);
 GO
 
-CREATE TABLE dbo.notifications (
+CREATE TABLE dbo.notifications
+(
     id BIGINT IDENTITY(1,1) NOT NULL,
     user_id BIGINT NOT NULL,
     type NVARCHAR(50) NOT NULL,
@@ -239,7 +249,8 @@ GO
 CREATE INDEX IX_notifications_user ON dbo.notifications(user_id);
 GO
 
-CREATE TABLE dbo.request_logs (
+CREATE TABLE dbo.request_logs
+(
     id BIGINT IDENTITY(1,1) NOT NULL,
     user_id BIGINT NULL,
     method NVARCHAR(10) NOT NULL,
@@ -267,14 +278,14 @@ AS
 BEGIN
     IF EXISTS (
         SELECT 1
-        FROM sys.extended_properties ep
+    FROM sys.extended_properties ep
         INNER JOIN sys.tables t ON ep.major_id = t.object_id
         INNER JOIN sys.schemas s ON t.schema_id = s.schema_id
         INNER JOIN sys.columns c ON ep.major_id = c.object_id AND ep.minor_id = c.column_id
-        WHERE ep.name = N'MS_Description'
-          AND s.name = N'dbo'
-          AND t.name = @table_name
-          AND c.name = @column_name
+    WHERE ep.name = N'MS_Description'
+        AND s.name = N'dbo'
+        AND t.name = @table_name
+        AND c.name = @column_name
     )
     BEGIN
         EXEC sys.sp_updateextendedproperty
@@ -308,7 +319,6 @@ EXEC dbo.usp_add_column_description N'users', N'created_at', N'建立時間';
 EXEC dbo.usp_add_column_description N'users', N'updated_at', N'更新時間';
 
 EXEC dbo.usp_add_column_description N'categories', N'id', N'分類 ID';
-EXEC dbo.usp_add_column_description N'categories', N'type', N'分類類型';
 EXEC dbo.usp_add_column_description N'categories', N'name', N'分類名稱';
 EXEC dbo.usp_add_column_description N'categories', N'slug', N'分類代碼';
 EXEC dbo.usp_add_column_description N'categories', N'is_active', N'是否啟用';
