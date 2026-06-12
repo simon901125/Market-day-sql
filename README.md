@@ -12,15 +12,18 @@
 
 - `users`：使用者帳號資料，包含 LOCAL / GOOGLE 登入來源、角色、狀態等欄位
 - `categories`：活動與攤位共用分類，不再用 `type` 區分分類用途
-- `vendors`：攤位資料
-- `vendor_images`：攤位圖片
+- `vendors`：攤位資料，包含負責人姓名、縣市、區與詳細地址
+- `vendor_images`：攤位圖片，圖片類型包含 `AVATAR`、`COVER`、`GALLERY`
 - `vendor_products`：攤位商品
-- `market_events`：市集活動
+- `market_events`：市集活動，包含發布狀態與活動審核狀態
 - `event_sessions`：活動場次
 - `event_images`：活動圖片
-- `event_applications`：攤主活動報名
+- `event_stall_zones`：活動攤位分區
+- `event_stalls`：活動攤位，可記錄攤位尺寸、編號與選位狀態
+- `event_applications`：攤主活動報名，包含選擇攤位、保證金與報名審核備註
 - `application_sessions`：報名場次
 - `payments`：付款紀錄
+- `refunds`：退款紀錄，關聯報名與原付款紀錄
 - `notifications`：通知
 - `request_logs`：API request 紀錄
 
@@ -34,7 +37,7 @@
 
 - 各資料表的主要責任
 - foreign key 關聯方向
-- 使用者、攤位、活動、報名、付款之間的流程關係
+- 使用者、攤位、活動、攤位分區、活動攤位、報名、付款、退款之間的流程關係
 - 修改資料表時可能影響到的相依表
 
 ## 輔助檔案
@@ -105,6 +108,8 @@ spring.datasource.url=jdbc:sqlserver://localhost:1433;databaseName=MarketDayDB;e
 - API request / response 是否需要更新
 - Swagger schema 是否需要同步更新
 - `test.sql` 是否需要補測試資料
+
+近期 schema 已補上活動審核、攤位選位、保證金與退款流程；若後端開始實作這些功能，需同步檢查相關 Entity / DTO / API 文件是否已包含 `review_status`、`review_note`、`selected_stall_id`、`deposit_amount`、`deposit_status`、`event_stalls` 與 `refunds`。
 
 若變更 `users` 欄位，請特別檢查：
 

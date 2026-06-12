@@ -60,6 +60,10 @@ CREATE TABLE dbo.vendors
     website_url NVARCHAR(500) NULL,
     contact_email NVARCHAR(255) NULL,
     contact_phone NVARCHAR(30) NULL,
+    owner_name NVARCHAR(100) NULL,
+    city NVARCHAR(50) NULL,
+    district NVARCHAR(50) NULL,
+    address NVARCHAR(255) NULL,
     status NVARCHAR(30) NOT NULL,
     CONSTRAINT PK_vendors PRIMARY KEY (id),
     CONSTRAINT FK_vendors_users FOREIGN KEY (user_id) REFERENCES dbo.users(id),
@@ -79,12 +83,13 @@ CREATE TABLE dbo.vendor_images
     image_url NVARCHAR(500) NOT NULL,
     CONSTRAINT PK_vendor_images PRIMARY KEY (id),
     CONSTRAINT FK_vendor_images_vendors FOREIGN KEY (vendor_id) REFERENCES dbo.vendors(id),
-    CONSTRAINT CK_vendor_images_image_type CHECK (image_type IN (N'MAIN', N'OTHERS'))
+    CONSTRAINT CK_vendor_images_image_type CHECK (image_type IN (N'AVATAR', N'COVER', N'GALLERY'))
 );
 GO
 
 CREATE INDEX IX_vendor_images_vendor_type ON dbo.vendor_images(vendor_id, image_type);
-CREATE UNIQUE INDEX UQ_vendor_images_main ON dbo.vendor_images(vendor_id) WHERE image_type = N'MAIN';
+CREATE UNIQUE INDEX UQ_vendor_images_avatar ON dbo.vendor_images(vendor_id) WHERE image_type = N'AVATAR';
+CREATE UNIQUE INDEX UQ_vendor_images_cover ON dbo.vendor_images(vendor_id) WHERE image_type = N'COVER';
 GO
 
 CREATE TABLE dbo.vendor_products
@@ -128,12 +133,15 @@ CREATE TABLE dbo.market_events
     cover_image_url NVARCHAR(500) NULL,
     map_image_url NVARCHAR(500) NULL,
     public_info_at DATETIME2(0) NULL,
+    review_status NVARCHAR(30) NOT NULL CONSTRAINT DF_market_events_review_status DEFAULT N'REVISION_REQUIRED',
+    review_note NVARCHAR(MAX) NULL,
     publish_status NVARCHAR(30) NOT NULL CONSTRAINT DF_market_events_publish_status DEFAULT N'DRAFT',
     CONSTRAINT PK_market_events PRIMARY KEY (id),
     CONSTRAINT FK_market_events_users FOREIGN KEY (user_id) REFERENCES dbo.users(id),
     CONSTRAINT FK_market_events_categories FOREIGN KEY (category_id) REFERENCES dbo.categories(id),
     CONSTRAINT CK_market_events_date_range CHECK (end_date >= start_date),
     CONSTRAINT CK_market_events_registration_range CHECK (registration_end_at >= registration_start_at),
+    CONSTRAINT CK_market_events_review_status CHECK (review_status IN (N'APPROVED', N'REJECTED', N'REVISION_REQUIRED')),
     CONSTRAINT CK_market_events_publish_status CHECK (publish_status IN (N'DRAFT', N'PUBLISHED', N'UNPUBLISHED', N'CANCELLED'))
 );
 GO
@@ -141,6 +149,7 @@ GO
 CREATE INDEX IX_market_events_user ON dbo.market_events(user_id);
 CREATE INDEX IX_market_events_dates ON dbo.market_events(start_date, end_date);
 CREATE INDEX IX_market_events_city_category ON dbo.market_events(city, category_id);
+CREATE INDEX IX_market_events_review_status ON dbo.market_events(review_status);
 CREATE INDEX IX_market_events_publish_status ON dbo.market_events(publish_status);
 GO
 
@@ -167,6 +176,43 @@ CREATE TABLE dbo.event_images
 );
 GO
 
+CREATE TABLE dbo.event_stall_zones
+(
+    id BIGINT IDENTITY(1,1) NOT NULL,
+    event_id BIGINT NOT NULL,
+    zone_name NVARCHAR(50) NOT NULL,
+    stall_count INT NOT NULL,
+    CONSTRAINT PK_event_stall_zones PRIMARY KEY (id),
+    CONSTRAINT FK_event_stall_zones_market_events FOREIGN KEY (event_id) REFERENCES dbo.market_events(id),
+    CONSTRAINT CK_event_stall_zones_stall_count CHECK (stall_count >= 0)
+);
+GO
+
+CREATE INDEX IX_event_stall_zones_event ON dbo.event_stall_zones(event_id);
+GO
+
+CREATE TABLE dbo.event_stalls
+(
+    id BIGINT IDENTITY(1,1) NOT NULL,
+    event_id BIGINT NOT NULL,
+    zone_id BIGINT NOT NULL,
+    stall_no NVARCHAR(30) NOT NULL,
+    width DECIMAL(6,2) NULL,
+    length DECIMAL(6,2) NULL,
+    height DECIMAL(6,2) NULL,
+    status NVARCHAR(30) NOT NULL CONSTRAINT DF_event_stalls_status DEFAULT N'AVAILABLE',
+    CONSTRAINT PK_event_stalls PRIMARY KEY (id),
+    CONSTRAINT UQ_event_stalls_event_stall_no UNIQUE (event_id, stall_no),
+    CONSTRAINT FK_event_stalls_market_events FOREIGN KEY (event_id) REFERENCES dbo.market_events(id),
+    CONSTRAINT FK_event_stalls_event_stall_zones FOREIGN KEY (zone_id) REFERENCES dbo.event_stall_zones(id),
+    CONSTRAINT CK_event_stalls_status CHECK (status IN (N'AVAILABLE', N'SELECTED', N'SOLD', N'DISABLED'))
+);
+GO
+
+CREATE INDEX IX_event_stalls_event_status ON dbo.event_stalls(event_id, status);
+CREATE INDEX IX_event_stalls_zone ON dbo.event_stalls(zone_id);
+GO
+
 CREATE TABLE dbo.event_applications
 (
     id BIGINT IDENTITY(1,1) NOT NULL,
@@ -174,11 +220,15 @@ CREATE TABLE dbo.event_applications
     event_id BIGINT NOT NULL,
     user_id BIGINT NOT NULL,
     vendor_id BIGINT NOT NULL,
+    selected_stall_id BIGINT NULL,
     vehicle_no NVARCHAR(30) NULL,
     applicant_note NVARCHAR(MAX) NULL,
     total_amount DECIMAL(10,2) NOT NULL,
+    deposit_amount DECIMAL(10,2) NOT NULL CONSTRAINT DF_event_applications_deposit_amount DEFAULT 0,
+    deposit_status NVARCHAR(30) NOT NULL CONSTRAINT DF_event_applications_deposit_status DEFAULT N'NOT_REFUNDED',
     payment_due_at DATETIME2(0) NULL,
     review_status NVARCHAR(30) NULL,
+    review_note NVARCHAR(MAX) NULL,
     payment_status NVARCHAR(30) NULL,
     CONSTRAINT PK_event_applications PRIMARY KEY (id),
     CONSTRAINT UQ_event_applications_application_no UNIQUE (application_no),
@@ -186,13 +236,16 @@ CREATE TABLE dbo.event_applications
     CONSTRAINT FK_event_applications_market_events FOREIGN KEY (event_id) REFERENCES dbo.market_events(id),
     CONSTRAINT FK_event_applications_users FOREIGN KEY (user_id) REFERENCES dbo.users(id),
     CONSTRAINT FK_event_applications_vendors FOREIGN KEY (vendor_id) REFERENCES dbo.vendors(id),
+    CONSTRAINT FK_event_applications_event_stalls FOREIGN KEY (selected_stall_id) REFERENCES dbo.event_stalls(id),
     CONSTRAINT CK_event_applications_review_status CHECK (review_status IS NULL OR review_status IN (N'PENDING', N'APPROVED', N'REJECTED', N'CANCELLED')),
+    CONSTRAINT CK_event_applications_deposit_status CHECK (deposit_status IN (N'NOT_REFUNDED', N'REFUNDED')),
     CONSTRAINT CK_event_applications_payment_status CHECK (payment_status IS NULL OR payment_status IN (N'UNPAID', N'PAID', N'FAILED', N'CANCELLED'))
 );
 GO
 
 CREATE INDEX IX_event_applications_event_review ON dbo.event_applications(event_id, review_status);
 CREATE INDEX IX_event_applications_user ON dbo.event_applications(user_id);
+CREATE INDEX IX_event_applications_selected_stall ON dbo.event_applications(selected_stall_id);
 CREATE INDEX IX_event_applications_payment_due ON dbo.event_applications(payment_status, payment_due_at);
 GO
 
@@ -232,6 +285,28 @@ GO
 
 CREATE INDEX IX_payments_application ON dbo.payments(application_id);
 CREATE INDEX IX_payments_status ON dbo.payments(status);
+GO
+
+CREATE TABLE dbo.refunds
+(
+    id BIGINT IDENTITY(1,1) NOT NULL,
+    refund_no NVARCHAR(40) NOT NULL,
+    application_id BIGINT NOT NULL,
+    payment_id BIGINT NULL,
+    amount DECIMAL(10,2) NOT NULL,
+    review_status NVARCHAR(30) NOT NULL,
+    refunded_at DATETIME2(0) NULL,
+    CONSTRAINT PK_refunds PRIMARY KEY (id),
+    CONSTRAINT UQ_refunds_refund_no UNIQUE (refund_no),
+    CONSTRAINT FK_refunds_event_applications FOREIGN KEY (application_id) REFERENCES dbo.event_applications(id),
+    CONSTRAINT FK_refunds_payments FOREIGN KEY (payment_id) REFERENCES dbo.payments(id),
+    CONSTRAINT CK_refunds_review_status CHECK (review_status IN (N'PENDING', N'APPROVED', N'REJECTED'))
+);
+GO
+
+CREATE INDEX IX_refunds_application ON dbo.refunds(application_id);
+CREATE INDEX IX_refunds_payment ON dbo.refunds(payment_id);
+CREATE INDEX IX_refunds_review_status ON dbo.refunds(review_status);
 GO
 
 CREATE TABLE dbo.notifications
@@ -334,6 +409,10 @@ EXEC dbo.usp_add_column_description N'vendors', N'facebook_url', N'Facebook';
 EXEC dbo.usp_add_column_description N'vendors', N'website_url', N'官方網站';
 EXEC dbo.usp_add_column_description N'vendors', N'contact_email', N'攤位聯絡 Email';
 EXEC dbo.usp_add_column_description N'vendors', N'contact_phone', N'攤位聯絡電話';
+EXEC dbo.usp_add_column_description N'vendors', N'owner_name', N'負責人姓名';
+EXEC dbo.usp_add_column_description N'vendors', N'city', N'縣市';
+EXEC dbo.usp_add_column_description N'vendors', N'district', N'區';
+EXEC dbo.usp_add_column_description N'vendors', N'address', N'詳細地址';
 EXEC dbo.usp_add_column_description N'vendors', N'status', N'攤位狀態';
 
 EXEC dbo.usp_add_column_description N'vendor_images', N'id', N'照片 ID';
@@ -373,6 +452,8 @@ EXEC dbo.usp_add_column_description N'market_events', N'base_fee', N'基本攤�
 EXEC dbo.usp_add_column_description N'market_events', N'cover_image_url', N'活動封面';
 EXEC dbo.usp_add_column_description N'market_events', N'map_image_url', N'攤位地圖底圖';
 EXEC dbo.usp_add_column_description N'market_events', N'public_info_at', N'公開資訊時間';
+EXEC dbo.usp_add_column_description N'market_events', N'review_status', N'活動審核狀態（APPROVED/REJECTED/REVISION_REQUIRED）';
+EXEC dbo.usp_add_column_description N'market_events', N'review_note', N'補件原因 / 審核備註';
 EXEC dbo.usp_add_column_description N'market_events', N'publish_status', N'活動發布狀態（DRAFT/PUBLISHED/UNPUBLISHED/CANCELLED）';
 
 EXEC dbo.usp_add_column_description N'event_sessions', N'id', N'場次 ID';
@@ -386,17 +467,35 @@ EXEC dbo.usp_add_column_description N'event_images', N'id', N'圖片 ID';
 EXEC dbo.usp_add_column_description N'event_images', N'event_id', N'活動 ID';
 EXEC dbo.usp_add_column_description N'event_images', N'image_url', N'圖片路徑';
 
+EXEC dbo.usp_add_column_description N'event_stall_zones', N'id', N'分區 ID';
+EXEC dbo.usp_add_column_description N'event_stall_zones', N'event_id', N'活動 ID';
+EXEC dbo.usp_add_column_description N'event_stall_zones', N'zone_name', N'分區名稱';
+EXEC dbo.usp_add_column_description N'event_stall_zones', N'stall_count', N'分區攤位數量';
+
+EXEC dbo.usp_add_column_description N'event_stalls', N'id', N'攤位 ID';
+EXEC dbo.usp_add_column_description N'event_stalls', N'event_id', N'活動 ID';
+EXEC dbo.usp_add_column_description N'event_stalls', N'zone_id', N'分區 ID';
+EXEC dbo.usp_add_column_description N'event_stalls', N'stall_no', N'攤位編號';
+EXEC dbo.usp_add_column_description N'event_stalls', N'width', N'攤位寬度';
+EXEC dbo.usp_add_column_description N'event_stalls', N'length', N'攤位長度';
+EXEC dbo.usp_add_column_description N'event_stalls', N'height', N'攤位高度';
+EXEC dbo.usp_add_column_description N'event_stalls', N'status', N'攤位狀態（AVAILABLE/SELECTED/SOLD/DISABLED）';
+
 EXEC dbo.usp_add_column_description N'event_applications', N'id', N'報名 ID';
 EXEC dbo.usp_add_column_description N'event_applications', N'application_no', N'報名編號';
 EXEC dbo.usp_add_column_description N'event_applications', N'event_id', N'活動 ID';
 EXEC dbo.usp_add_column_description N'event_applications', N'user_id', N'攤主 ID';
 EXEC dbo.usp_add_column_description N'event_applications', N'vendor_id', N'攤位 ID';
+EXEC dbo.usp_add_column_description N'event_applications', N'selected_stall_id', N'選擇的活動攤位';
 EXEC dbo.usp_add_column_description N'event_applications', N'vehicle_no', N'車牌';
 EXEC dbo.usp_add_column_description N'event_applications', N'applicant_note', N'攤主備註';
 EXEC dbo.usp_add_column_description N'event_applications', N'total_amount', N'試算總金額';
+EXEC dbo.usp_add_column_description N'event_applications', N'deposit_amount', N'保證金金額';
+EXEC dbo.usp_add_column_description N'event_applications', N'deposit_status', N'保證金狀態（NOT_REFUNDED/REFUNDED）';
 EXEC dbo.usp_add_column_description N'event_applications', N'payment_due_at', N'付款期限';
-EXEC dbo.usp_add_column_description N'event_applications', N'review_status', N'報名審核狀態';
-EXEC dbo.usp_add_column_description N'event_applications', N'payment_status', N'報名付款狀態';
+EXEC dbo.usp_add_column_description N'event_applications', N'review_status', N'報名審核狀態（PENDING/APPROVED/REJECTED/CANCELLED）';
+EXEC dbo.usp_add_column_description N'event_applications', N'review_note', N'報名審核未通過原因';
+EXEC dbo.usp_add_column_description N'event_applications', N'payment_status', N'報名付款狀態（UNPAID/PAID/FAILED/CANCELLED）';
 
 EXEC dbo.usp_add_column_description N'application_sessions', N'id', N'ID';
 EXEC dbo.usp_add_column_description N'application_sessions', N'application_id', N'報名 ID';
@@ -415,6 +514,14 @@ EXEC dbo.usp_add_column_description N'payments', N'cvs_code', N'超商付款代�
 EXEC dbo.usp_add_column_description N'payments', N'status', N'付款狀態';
 EXEC dbo.usp_add_column_description N'payments', N'paid_at', N'付款成功時間';
 EXEC dbo.usp_add_column_description N'payments', N'created_at', N'建立時間';
+
+EXEC dbo.usp_add_column_description N'refunds', N'id', N'退款 ID';
+EXEC dbo.usp_add_column_description N'refunds', N'refund_no', N'退款編號';
+EXEC dbo.usp_add_column_description N'refunds', N'application_id', N'報名 ID';
+EXEC dbo.usp_add_column_description N'refunds', N'payment_id', N'原付款紀錄';
+EXEC dbo.usp_add_column_description N'refunds', N'amount', N'退款金額';
+EXEC dbo.usp_add_column_description N'refunds', N'review_status', N'退款審核狀態（PENDING/APPROVED/REJECTED）';
+EXEC dbo.usp_add_column_description N'refunds', N'refunded_at', N'實際退款完成時間';
 
 EXEC dbo.usp_add_column_description N'notifications', N'id', N'通知 ID';
 EXEC dbo.usp_add_column_description N'notifications', N'user_id', N'接收者';
