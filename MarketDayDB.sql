@@ -268,11 +268,8 @@ CREATE TABLE dbo.payments
     payment_no NVARCHAR(40) NOT NULL,
     application_id BIGINT NOT NULL,
     amount DECIMAL(10,2) NOT NULL,
-    method NVARCHAR(30) NOT NULL,
     provider NVARCHAR(30) NULL,
     provider_trade_no NVARCHAR(100) NULL,
-    virtual_account NVARCHAR(100) NULL,
-    cvs_code NVARCHAR(100) NULL,
     status NVARCHAR(30) NOT NULL,
     paid_at DATETIME2(0) NULL,
     created_at DATETIME2(0) NOT NULL CONSTRAINT DF_payments_created_at DEFAULT SYSDATETIME(),
@@ -506,12 +503,9 @@ EXEC dbo.usp_add_column_description N'payments', N'id', N'付款 ID';
 EXEC dbo.usp_add_column_description N'payments', N'payment_no', N'付款編號';
 EXEC dbo.usp_add_column_description N'payments', N'application_id', N'報名 ID';
 EXEC dbo.usp_add_column_description N'payments', N'amount', N'付款金額';
-EXEC dbo.usp_add_column_description N'payments', N'method', N'付款方式';
 EXEC dbo.usp_add_column_description N'payments', N'provider', N'金流服務商';
 EXEC dbo.usp_add_column_description N'payments', N'provider_trade_no', N'金流交易編號';
-EXEC dbo.usp_add_column_description N'payments', N'virtual_account', N'ATM 虛擬帳號';
-EXEC dbo.usp_add_column_description N'payments', N'cvs_code', N'超商付款代碼';
-EXEC dbo.usp_add_column_description N'payments', N'status', N'付款狀態';
+EXEC dbo.usp_add_column_description N'payments', N'status', N'付款狀態(PENDING/PAID/FAILED)';
 EXEC dbo.usp_add_column_description N'payments', N'paid_at', N'付款成功時間';
 EXEC dbo.usp_add_column_description N'payments', N'created_at', N'建立時間';
 
