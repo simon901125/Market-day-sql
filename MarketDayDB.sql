@@ -21,19 +21,55 @@ CREATE TABLE dbo.users
     password_hash VARCHAR(255) NULL,
     phone VARCHAR(30) NULL,
     provider VARCHAR(30) NOT NULL,
-    status VARCHAR(30) NOT NULL CONSTRAINT DF_users_status DEFAULT 'ACTIVE',
+    status VARCHAR(30) NOT NULL CONSTRAINT DF_users_status DEFAULT 'UNACTIVE',
+    email_verified_at DATETIME2(0) NULL,
     created_at DATETIME2(0) NOT NULL CONSTRAINT DF_users_created_at DEFAULT SYSDATETIME(),
     updated_at DATETIME2(0) NOT NULL CONSTRAINT DF_users_updated_at DEFAULT SYSDATETIME(),
     CONSTRAINT PK_users PRIMARY KEY (id),
     CONSTRAINT UQ_users_email UNIQUE (email),
     CONSTRAINT CK_users_role CHECK (role IN ('VENDOR', 'ORGANIZER', 'ADMIN')),
     CONSTRAINT CK_users_provider CHECK (provider IN ('LOCAL', 'GOOGLE')),
-    CONSTRAINT CK_users_status CHECK (status IN ('ACTIVE', 'NOT_ACTIVE', 'IS_DELETED'))
+    CONSTRAINT CK_users_status CHECK (status IN ('UNACTIVE', 'ACTIVE', 'NOT_ACTIVE', 'IS_DELETED'))
 );
 GO
 
 CREATE INDEX IX_users_role_status ON dbo.users(role, status);
 CREATE INDEX IX_users_provider ON dbo.users(provider);
+GO
+
+CREATE TRIGGER dbo.trg_users_activate_after_email_verified
+ON dbo.users
+AFTER INSERT, UPDATE
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    UPDATE users
+    SET status = 'ACTIVE',
+        updated_at = SYSDATETIME()
+    FROM dbo.users users
+    INNER JOIN inserted inserted_users ON users.id = inserted_users.id
+    WHERE inserted_users.email_verified_at IS NOT NULL
+      AND users.status = 'UNACTIVE';
+END;
+GO
+
+CREATE TABLE dbo.user_tokens
+(
+    id BIGINT IDENTITY(1,1) NOT NULL,
+    user_id BIGINT NOT NULL,
+    token VARCHAR(100) NOT NULL,
+    token_type VARCHAR(30) NOT NULL,
+    expires_at DATETIME2(0) NOT NULL,
+    CONSTRAINT PK_user_tokens PRIMARY KEY (id),
+    CONSTRAINT UQ_user_tokens_token UNIQUE (token),
+    CONSTRAINT FK_user_tokens_users FOREIGN KEY (user_id) REFERENCES dbo.users(id),
+    CONSTRAINT CK_user_tokens_type CHECK (token_type IN ('EMAIL_VERIFY', 'PASSWORD_RESET'))
+);
+GO
+
+CREATE INDEX IX_user_tokens_user_type ON dbo.user_tokens(user_id, token_type);
+CREATE INDEX IX_user_tokens_type_expires ON dbo.user_tokens(token_type, expires_at);
 GO
 
 CREATE TABLE dbo.categories
@@ -386,9 +422,17 @@ EXEC dbo.usp_add_column_description N'users', N'email', N'登入 Email';
 EXEC dbo.usp_add_column_description N'users', N'password_hash', N'密碼雜湊值（LOCAL）';
 EXEC dbo.usp_add_column_description N'users', N'phone', N'聯絡電話';
 EXEC dbo.usp_add_column_description N'users', N'provider', N'登入來源（LOCAL/GOOGLE）';
-EXEC dbo.usp_add_column_description N'users', N'status', N'帳號狀態（ACTIVE/NOT_ACTIVE/IS_DELETED）';
+EXEC dbo.usp_add_column_description N'users', N'status', N'帳號狀態（UNACTIVE/ACTIVE/NOT_ACTIVE/IS_DELETED）';
+EXEC dbo.usp_add_column_description N'users', N'email_verified_at', N'Email 驗證完成時間';
 EXEC dbo.usp_add_column_description N'users', N'created_at', N'建立時間';
 EXEC dbo.usp_add_column_description N'users', N'updated_at', N'更新時間';
+
+EXEC dbo.usp_add_table_description N'user_tokens', N'使用者驗證與重設密碼 token';
+EXEC dbo.usp_add_column_description N'user_tokens', N'id', N'使用者 token ID';
+EXEC dbo.usp_add_column_description N'user_tokens', N'user_id', N'使用者 ID';
+EXEC dbo.usp_add_column_description N'user_tokens', N'token', N'token';
+EXEC dbo.usp_add_column_description N'user_tokens', N'token_type', N'token 類型（EMAIL_VERIFY/PASSWORD_RESET）';
+EXEC dbo.usp_add_column_description N'user_tokens', N'expires_at', N'過期時間';
 
 EXEC dbo.usp_add_column_description N'categories', N'id', N'分類 ID';
 EXEC dbo.usp_add_column_description N'categories', N'name', N'分類名稱';
