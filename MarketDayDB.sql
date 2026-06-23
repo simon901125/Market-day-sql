@@ -48,9 +48,9 @@ BEGIN
     SET status = 'ACTIVE',
         updated_at = SYSDATETIME()
     FROM dbo.users users
-    INNER JOIN inserted inserted_users ON users.id = inserted_users.id
+        INNER JOIN inserted inserted_users ON users.id = inserted_users.id
     WHERE inserted_users.email_verified_at IS NOT NULL
-      AND users.status = 'UNACTIVE';
+        AND users.status = 'UNACTIVE';
 END;
 GO
 
@@ -378,6 +378,39 @@ GO
    Column descriptions
    ========================================================= */
 
+CREATE OR ALTER PROCEDURE dbo.usp_add_table_description
+    @table_name SYSNAME,
+    @description NVARCHAR(4000)
+AS
+BEGIN
+    IF EXISTS (
+        SELECT 1
+    FROM sys.extended_properties ep
+        INNER JOIN sys.tables t ON ep.major_id = t.object_id
+        INNER JOIN sys.schemas s ON t.schema_id = s.schema_id
+    WHERE ep.name = N'MS_Description'
+        AND s.name = N'dbo'
+        AND t.name = @table_name
+        AND ep.minor_id = 0
+    )
+    BEGIN
+        EXEC sys.sp_updateextendedproperty
+            @name = N'MS_Description',
+            @value = @description,
+            @level0type = N'SCHEMA', @level0name = N'dbo',
+            @level1type = N'TABLE',  @level1name = @table_name;
+    END
+    ELSE
+    BEGIN
+        EXEC sys.sp_addextendedproperty
+            @name = N'MS_Description',
+            @value = @description,
+            @level0type = N'SCHEMA', @level0name = N'dbo',
+            @level1type = N'TABLE',  @level1name = @table_name;
+    END
+END
+GO
+
 CREATE OR ALTER PROCEDURE dbo.usp_add_column_description
     @table_name SYSNAME,
     @column_name SYSNAME,
@@ -427,7 +460,6 @@ EXEC dbo.usp_add_column_description N'users', N'email_verified_at', N'Email 驗�
 EXEC dbo.usp_add_column_description N'users', N'created_at', N'建立時間';
 EXEC dbo.usp_add_column_description N'users', N'updated_at', N'更新時間';
 
-EXEC dbo.usp_add_table_description N'user_tokens', N'使用者驗證與重設密碼 token';
 EXEC dbo.usp_add_column_description N'user_tokens', N'id', N'使用者 token ID';
 EXEC dbo.usp_add_column_description N'user_tokens', N'user_id', N'使用者 ID';
 EXEC dbo.usp_add_column_description N'user_tokens', N'token', N'token';
@@ -439,30 +471,30 @@ EXEC dbo.usp_add_column_description N'categories', N'name', N'分類名稱';
 EXEC dbo.usp_add_column_description N'categories', N'slug', N'分類代碼';
 EXEC dbo.usp_add_column_description N'categories', N'is_active', N'是否啟用';
 
-EXEC dbo.usp_add_column_description N'vendors', N'id', N'攤位 ID';
+EXEC dbo.usp_add_column_description N'vendors', N'id', N'品牌 ID';
 EXEC dbo.usp_add_column_description N'vendors', N'user_id', N'攤主使用者 ID';
 EXEC dbo.usp_add_column_description N'vendors', N'category_id', N'分類 ID';
-EXEC dbo.usp_add_column_description N'vendors', N'name', N'攤位名稱';
-EXEC dbo.usp_add_column_description N'vendors', N'short_description', N'攤位簡介';
-EXEC dbo.usp_add_column_description N'vendors', N'description', N'攤位介紹';
+EXEC dbo.usp_add_column_description N'vendors', N'name', N'品牌名稱';
+EXEC dbo.usp_add_column_description N'vendors', N'short_description', N'品牌簡介';
+EXEC dbo.usp_add_column_description N'vendors', N'description', N'品牌介紹';
 EXEC dbo.usp_add_column_description N'vendors', N'instagram_url', N'Instagram';
 EXEC dbo.usp_add_column_description N'vendors', N'facebook_url', N'Facebook';
 EXEC dbo.usp_add_column_description N'vendors', N'website_url', N'官方網站';
-EXEC dbo.usp_add_column_description N'vendors', N'contact_email', N'攤位聯絡 Email';
-EXEC dbo.usp_add_column_description N'vendors', N'contact_phone', N'攤位聯絡電話';
+EXEC dbo.usp_add_column_description N'vendors', N'contact_email', N'品牌聯絡 Email';
+EXEC dbo.usp_add_column_description N'vendors', N'contact_phone', N'品牌聯絡電話';
 EXEC dbo.usp_add_column_description N'vendors', N'owner_name', N'負責人姓名';
 EXEC dbo.usp_add_column_description N'vendors', N'city', N'縣市';
 EXEC dbo.usp_add_column_description N'vendors', N'district', N'區';
 EXEC dbo.usp_add_column_description N'vendors', N'address', N'詳細地址';
-EXEC dbo.usp_add_column_description N'vendors', N'status', N'攤位狀態';
+EXEC dbo.usp_add_column_description N'vendors', N'status', N'品牌狀態';
 
 EXEC dbo.usp_add_column_description N'vendor_images', N'id', N'照片 ID';
-EXEC dbo.usp_add_column_description N'vendor_images', N'vendor_id', N'攤位 ID';
+EXEC dbo.usp_add_column_description N'vendor_images', N'vendor_id', N'品牌 ID';
 EXEC dbo.usp_add_column_description N'vendor_images', N'image_type', N'圖片類型';
 EXEC dbo.usp_add_column_description N'vendor_images', N'image_url', N'圖片路徑';
 
 EXEC dbo.usp_add_column_description N'vendor_products', N'id', N'商品 ID';
-EXEC dbo.usp_add_column_description N'vendor_products', N'vendor_id', N'攤位 ID';
+EXEC dbo.usp_add_column_description N'vendor_products', N'vendor_id', N'品牌 ID';
 EXEC dbo.usp_add_column_description N'vendor_products', N'name', N'商品名稱';
 EXEC dbo.usp_add_column_description N'vendor_products', N'short_description', N'商品簡介';
 EXEC dbo.usp_add_column_description N'vendor_products', N'description', N'商品介紹';
@@ -526,7 +558,7 @@ EXEC dbo.usp_add_column_description N'event_applications', N'id', N'報名 ID';
 EXEC dbo.usp_add_column_description N'event_applications', N'application_no', N'報名編號';
 EXEC dbo.usp_add_column_description N'event_applications', N'event_id', N'活動 ID';
 EXEC dbo.usp_add_column_description N'event_applications', N'user_id', N'攤主 ID';
-EXEC dbo.usp_add_column_description N'event_applications', N'vendor_id', N'攤位 ID';
+EXEC dbo.usp_add_column_description N'event_applications', N'vendor_id', N'品牌 ID';
 EXEC dbo.usp_add_column_description N'event_applications', N'selected_stall_id', N'選擇的活動攤位';
 EXEC dbo.usp_add_column_description N'event_applications', N'vehicle_no', N'車牌';
 EXEC dbo.usp_add_column_description N'event_applications', N'applicant_note', N'攤主備註';
@@ -576,4 +608,7 @@ EXEC dbo.usp_add_column_description N'request_logs', N'created_at', N'建立時�
 GO
 
 DROP PROCEDURE dbo.usp_add_column_description;
+GO
+
+DROP PROCEDURE dbo.usp_add_table_description;
 GO
