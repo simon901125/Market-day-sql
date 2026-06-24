@@ -22,19 +22,22 @@ CREATE TABLE dbo.users
     phone VARCHAR(30) NULL,
     provider VARCHAR(30) NOT NULL,
     status VARCHAR(30) NOT NULL CONSTRAINT DF_users_status DEFAULT 'UNACTIVE',
+    isLogin BIT NOT NULL CONSTRAINT DF_users_isLogin DEFAULT 0,
     email_verified_at DATETIME2(0) NULL,
+    expired_time DATETIME2(0) NOT NULL CONSTRAINT DF_users_expired_time DEFAULT SYSDATETIME(),
     created_at DATETIME2(0) NOT NULL CONSTRAINT DF_users_created_at DEFAULT SYSDATETIME(),
     updated_at DATETIME2(0) NOT NULL CONSTRAINT DF_users_updated_at DEFAULT SYSDATETIME(),
     CONSTRAINT PK_users PRIMARY KEY (id),
     CONSTRAINT UQ_users_email UNIQUE (email),
     CONSTRAINT CK_users_role CHECK (role IN ('VENDOR', 'ORGANIZER', 'ADMIN')),
     CONSTRAINT CK_users_provider CHECK (provider IN ('LOCAL', 'GOOGLE')),
-    CONSTRAINT CK_users_status CHECK (status IN ('UNACTIVE', 'ACTIVE', 'NOT_ACTIVE', 'IS_DELETED'))
+    CONSTRAINT CK_users_status CHECK (status IN ('UNACTIVE', 'ACTIVE', 'IS_DELETED'))
 );
 GO
 
 CREATE INDEX IX_users_role_status ON dbo.users(role, status);
 CREATE INDEX IX_users_provider ON dbo.users(provider);
+CREATE INDEX IX_users_isLogin_expired_time ON dbo.users(isLogin, expired_time);
 GO
 
 CREATE TRIGGER dbo.trg_users_activate_after_email_verified
@@ -45,8 +48,7 @@ BEGIN
     SET NOCOUNT ON;
 
     UPDATE users
-    SET status = 'ACTIVE',
-        updated_at = SYSDATETIME()
+    SET status = 'ACTIVE'
     FROM dbo.users users
         INNER JOIN inserted inserted_users ON users.id = inserted_users.id
     WHERE inserted_users.email_verified_at IS NOT NULL
@@ -83,55 +85,122 @@ CREATE TABLE dbo.categories
 );
 GO
 
-CREATE TABLE dbo.vendors
+CREATE TABLE dbo.user_profiles
 (
     id BIGINT IDENTITY(1,1) NOT NULL,
     user_id BIGINT NOT NULL,
-    category_id BIGINT NOT NULL,
+    profile_type NVARCHAR(30) NOT NULL,
     name NVARCHAR(150) NOT NULL,
-    short_description NVARCHAR(255) NOT NULL,
-    description NVARCHAR(MAX) NOT NULL,
-    instagram_url NVARCHAR(500) NULL,
-    facebook_url NVARCHAR(500) NULL,
-    website_url NVARCHAR(500) NULL,
+    contact_name NVARCHAR(100) NOT NULL,
+    contact_phone NVARCHAR(30) NOT NULL,
     contact_email NVARCHAR(255) NULL,
-    contact_phone NVARCHAR(30) NULL,
-    owner_name NVARCHAR(100) NULL,
     city NVARCHAR(50) NULL,
     district NVARCHAR(50) NULL,
     address NVARCHAR(255) NULL,
-    status NVARCHAR(30) NOT NULL,
-    CONSTRAINT PK_vendors PRIMARY KEY (id),
-    CONSTRAINT FK_vendors_users FOREIGN KEY (user_id) REFERENCES dbo.users(id),
-    CONSTRAINT FK_vendors_categories FOREIGN KEY (category_id) REFERENCES dbo.categories(id),
-    CONSTRAINT CK_vendors_status CHECK (status IN (N'DRAFT', N'ACTIVE', N'HIDDEN'))
+    CONSTRAINT PK_user_profiles PRIMARY KEY (id),
+    CONSTRAINT FK_user_profiles_users FOREIGN KEY (user_id) REFERENCES dbo.users(id),
+    CONSTRAINT CK_user_profiles_profile_type CHECK (profile_type IN (N'VENDOR', N'ORGANIZER'))
 );
 GO
 
-CREATE INDEX IX_vendors_category_status ON dbo.vendors(category_id, status);
+CREATE INDEX IX_user_profiles_user_profile_type ON dbo.user_profiles(user_id, profile_type);
+GO
+
+CREATE TABLE dbo.vendor_profiles
+(
+    id BIGINT IDENTITY(1,1) NOT NULL,
+    user_profile_id BIGINT NOT NULL,
+    category_id BIGINT NOT NULL,
+    instagram_url NVARCHAR(500) NULL,
+    facebook_url NVARCHAR(500) NULL,
+    website_url NVARCHAR(500) NULL,
+    brand_description NVARCHAR(MAX) NULL,
+    brand_type NVARCHAR(100) NULL,
+    product_summary NVARCHAR(MAX) NULL,
+    CONSTRAINT PK_vendor_profiles PRIMARY KEY (id),
+    CONSTRAINT UQ_vendor_profiles_user_profile UNIQUE (user_profile_id),
+    CONSTRAINT FK_vendor_profiles_user_profiles FOREIGN KEY (user_profile_id) REFERENCES dbo.user_profiles(id),
+    CONSTRAINT FK_vendor_profiles_categories FOREIGN KEY (category_id) REFERENCES dbo.categories(id)
+);
+GO
+
+CREATE INDEX IX_vendor_profiles_category ON dbo.vendor_profiles(category_id);
+GO
+
+CREATE TABLE dbo.organizer_profiles
+(
+    id BIGINT IDENTITY(1,1) NOT NULL,
+    user_profile_id BIGINT NOT NULL,
+    company_name NVARCHAR(150) NULL,
+    tax_id NVARCHAR(20) NULL,
+    service_days NVARCHAR(100) NULL,
+    service_start_time TIME(0) NULL,
+    service_end_time TIME(0) NULL,
+    CONSTRAINT PK_organizer_profiles PRIMARY KEY (id),
+    CONSTRAINT UQ_organizer_profiles_user_profile UNIQUE (user_profile_id),
+    CONSTRAINT FK_organizer_profiles_user_profiles FOREIGN KEY (user_profile_id) REFERENCES dbo.user_profiles(id)
+);
+GO
+
+CREATE TRIGGER dbo.trg_vendor_profiles_validate_profile_type
+ON dbo.vendor_profiles
+AFTER INSERT, UPDATE
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    IF EXISTS (
+        SELECT 1
+        FROM inserted i
+        INNER JOIN dbo.user_profiles up ON up.id = i.user_profile_id
+        WHERE up.profile_type <> N'VENDOR'
+    )
+    BEGIN
+        THROW 50001, N'vendor_profiles.user_profile_id must reference a VENDOR profile.', 1;
+    END
+END
+GO
+
+CREATE TRIGGER dbo.trg_organizer_profiles_validate_profile_type
+ON dbo.organizer_profiles
+AFTER INSERT, UPDATE
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    IF EXISTS (
+        SELECT 1
+        FROM inserted i
+        INNER JOIN dbo.user_profiles up ON up.id = i.user_profile_id
+        WHERE up.profile_type <> N'ORGANIZER'
+    )
+    BEGIN
+        THROW 50002, N'organizer_profiles.user_profile_id must reference an ORGANIZER profile.', 1;
+    END
+END
 GO
 
 CREATE TABLE dbo.vendor_images
 (
     id BIGINT IDENTITY(1,1) NOT NULL,
-    vendor_id BIGINT NOT NULL,
+    vendor_profile_id BIGINT NOT NULL,
     image_type NVARCHAR(30) NOT NULL,
     image_url NVARCHAR(500) NOT NULL,
     CONSTRAINT PK_vendor_images PRIMARY KEY (id),
-    CONSTRAINT FK_vendor_images_vendors FOREIGN KEY (vendor_id) REFERENCES dbo.vendors(id),
+    CONSTRAINT FK_vendor_images_vendor_profiles FOREIGN KEY (vendor_profile_id) REFERENCES dbo.vendor_profiles(id),
     CONSTRAINT CK_vendor_images_image_type CHECK (image_type IN (N'AVATAR', N'COVER', N'GALLERY'))
 );
 GO
 
-CREATE INDEX IX_vendor_images_vendor_type ON dbo.vendor_images(vendor_id, image_type);
-CREATE UNIQUE INDEX UQ_vendor_images_avatar ON dbo.vendor_images(vendor_id) WHERE image_type = N'AVATAR';
-CREATE UNIQUE INDEX UQ_vendor_images_cover ON dbo.vendor_images(vendor_id) WHERE image_type = N'COVER';
+CREATE INDEX IX_vendor_images_vendor_profile_type ON dbo.vendor_images(vendor_profile_id, image_type);
+CREATE UNIQUE INDEX UQ_vendor_images_avatar ON dbo.vendor_images(vendor_profile_id) WHERE image_type = N'AVATAR';
+CREATE UNIQUE INDEX UQ_vendor_images_cover ON dbo.vendor_images(vendor_profile_id) WHERE image_type = N'COVER';
 GO
 
 CREATE TABLE dbo.vendor_products
 (
     id BIGINT IDENTITY(1,1) NOT NULL,
-    vendor_id BIGINT NOT NULL,
+    vendor_profile_id BIGINT NOT NULL,
     name NVARCHAR(150) NOT NULL,
     short_description NVARCHAR(255) NOT NULL,
     description NVARCHAR(MAX) NULL,
@@ -139,7 +208,7 @@ CREATE TABLE dbo.vendor_products
     image_url NVARCHAR(500) NULL,
     status NVARCHAR(30) NOT NULL,
     CONSTRAINT PK_vendor_products PRIMARY KEY (id),
-    CONSTRAINT FK_vendor_products_vendors FOREIGN KEY (vendor_id) REFERENCES dbo.vendors(id),
+    CONSTRAINT FK_vendor_products_vendor_profiles FOREIGN KEY (vendor_profile_id) REFERENCES dbo.vendor_profiles(id),
     CONSTRAINT CK_vendor_products_status CHECK (status IN (N'ACTIVE', N'HIDDEN'))
 );
 GO
@@ -255,7 +324,7 @@ CREATE TABLE dbo.event_applications
     application_no NVARCHAR(30) NOT NULL,
     event_id BIGINT NOT NULL,
     user_id BIGINT NOT NULL,
-    vendor_id BIGINT NOT NULL,
+    vendor_profile_id BIGINT NOT NULL,
     selected_stall_id BIGINT NULL,
     vehicle_no NVARCHAR(30) NULL,
     applicant_note NVARCHAR(MAX) NULL,
@@ -268,10 +337,10 @@ CREATE TABLE dbo.event_applications
     payment_status NVARCHAR(30) NULL,
     CONSTRAINT PK_event_applications PRIMARY KEY (id),
     CONSTRAINT UQ_event_applications_application_no UNIQUE (application_no),
-    CONSTRAINT UQ_event_applications_event_vendor UNIQUE (event_id, vendor_id),
+    CONSTRAINT UQ_event_applications_event_vendor_profile UNIQUE (event_id, vendor_profile_id),
     CONSTRAINT FK_event_applications_market_events FOREIGN KEY (event_id) REFERENCES dbo.market_events(id),
     CONSTRAINT FK_event_applications_users FOREIGN KEY (user_id) REFERENCES dbo.users(id),
-    CONSTRAINT FK_event_applications_vendors FOREIGN KEY (vendor_id) REFERENCES dbo.vendors(id),
+    CONSTRAINT FK_event_applications_vendor_profiles FOREIGN KEY (vendor_profile_id) REFERENCES dbo.vendor_profiles(id),
     CONSTRAINT FK_event_applications_event_stalls FOREIGN KEY (selected_stall_id) REFERENCES dbo.event_stalls(id),
     CONSTRAINT CK_event_applications_review_status CHECK (review_status IS NULL OR review_status IN (N'PENDING', N'APPROVED', N'REJECTED', N'CANCELLED')),
     CONSTRAINT CK_event_applications_deposit_status CHECK (deposit_status IN (N'NOT_REFUNDED', N'REFUNDED')),
@@ -455,9 +524,11 @@ EXEC dbo.usp_add_column_description N'users', N'email', N'登入 Email';
 EXEC dbo.usp_add_column_description N'users', N'password_hash', N'密碼雜湊值（LOCAL）';
 EXEC dbo.usp_add_column_description N'users', N'phone', N'聯絡電話';
 EXEC dbo.usp_add_column_description N'users', N'provider', N'登入來源（LOCAL/GOOGLE）';
-EXEC dbo.usp_add_column_description N'users', N'status', N'帳號狀態（UNACTIVE/ACTIVE/NOT_ACTIVE/IS_DELETED）';
+EXEC dbo.usp_add_column_description N'users', N'status', N'帳號狀態（UNACTIVE/ACTIVE/IS_DELETED）';
+EXEC dbo.usp_add_column_description N'users', N'isLogin', N'是否已有登入中的裝置';
 EXEC dbo.usp_add_column_description N'users', N'email_verified_at', N'Email 驗證完成時間';
 EXEC dbo.usp_add_column_description N'users', N'created_at', N'建立時間';
+EXEC dbo.usp_add_column_description N'users', N'expired_time', N'自動登出判斷時間';
 EXEC dbo.usp_add_column_description N'users', N'updated_at', N'更新時間';
 
 EXEC dbo.usp_add_column_description N'user_tokens', N'id', N'使用者 token ID';
@@ -471,30 +542,42 @@ EXEC dbo.usp_add_column_description N'categories', N'name', N'分類名稱';
 EXEC dbo.usp_add_column_description N'categories', N'slug', N'分類代碼';
 EXEC dbo.usp_add_column_description N'categories', N'is_active', N'是否啟用';
 
-EXEC dbo.usp_add_column_description N'vendors', N'id', N'品牌 ID';
-EXEC dbo.usp_add_column_description N'vendors', N'user_id', N'攤主使用者 ID';
-EXEC dbo.usp_add_column_description N'vendors', N'category_id', N'分類 ID';
-EXEC dbo.usp_add_column_description N'vendors', N'name', N'品牌名稱';
-EXEC dbo.usp_add_column_description N'vendors', N'short_description', N'品牌簡介';
-EXEC dbo.usp_add_column_description N'vendors', N'description', N'品牌介紹';
-EXEC dbo.usp_add_column_description N'vendors', N'instagram_url', N'Instagram';
-EXEC dbo.usp_add_column_description N'vendors', N'facebook_url', N'Facebook';
-EXEC dbo.usp_add_column_description N'vendors', N'website_url', N'官方網站';
-EXEC dbo.usp_add_column_description N'vendors', N'contact_email', N'品牌聯絡 Email';
-EXEC dbo.usp_add_column_description N'vendors', N'contact_phone', N'品牌聯絡電話';
-EXEC dbo.usp_add_column_description N'vendors', N'owner_name', N'負責人姓名';
-EXEC dbo.usp_add_column_description N'vendors', N'city', N'縣市';
-EXEC dbo.usp_add_column_description N'vendors', N'district', N'區';
-EXEC dbo.usp_add_column_description N'vendors', N'address', N'詳細地址';
-EXEC dbo.usp_add_column_description N'vendors', N'status', N'品牌狀態';
+EXEC dbo.usp_add_column_description N'user_profiles', N'id', N'個人資料 ID';
+EXEC dbo.usp_add_column_description N'user_profiles', N'user_id', N'使用者 ID';
+EXEC dbo.usp_add_column_description N'user_profiles', N'profile_type', N'資料類型（VENDOR/ORGANIZER）';
+EXEC dbo.usp_add_column_description N'user_profiles', N'name', N'名稱';
+EXEC dbo.usp_add_column_description N'user_profiles', N'contact_name', N'聯絡人';
+EXEC dbo.usp_add_column_description N'user_profiles', N'contact_phone', N'聯絡電話';
+EXEC dbo.usp_add_column_description N'user_profiles', N'contact_email', N'聯絡 Email';
+EXEC dbo.usp_add_column_description N'user_profiles', N'city', N'縣市';
+EXEC dbo.usp_add_column_description N'user_profiles', N'district', N'區';
+EXEC dbo.usp_add_column_description N'user_profiles', N'address', N'詳細地址';
+
+EXEC dbo.usp_add_column_description N'vendor_profiles', N'id', N'攤主品牌資料 ID';
+EXEC dbo.usp_add_column_description N'vendor_profiles', N'user_profile_id', N'共用個人資料 ID';
+EXEC dbo.usp_add_column_description N'vendor_profiles', N'category_id', N'品牌分類 ID';
+EXEC dbo.usp_add_column_description N'vendor_profiles', N'instagram_url', N'Instagram';
+EXEC dbo.usp_add_column_description N'vendor_profiles', N'facebook_url', N'Facebook';
+EXEC dbo.usp_add_column_description N'vendor_profiles', N'website_url', N'官方網站';
+EXEC dbo.usp_add_column_description N'vendor_profiles', N'brand_description', N'品牌資訊';
+EXEC dbo.usp_add_column_description N'vendor_profiles', N'brand_type', N'品牌類型';
+EXEC dbo.usp_add_column_description N'vendor_profiles', N'product_summary', N'品牌商品摘要';
+
+EXEC dbo.usp_add_column_description N'organizer_profiles', N'id', N'主辦方資料 ID';
+EXEC dbo.usp_add_column_description N'organizer_profiles', N'user_profile_id', N'共用個人資料 ID';
+EXEC dbo.usp_add_column_description N'organizer_profiles', N'company_name', N'公司名稱';
+EXEC dbo.usp_add_column_description N'organizer_profiles', N'tax_id', N'統一編號';
+EXEC dbo.usp_add_column_description N'organizer_profiles', N'service_days', N'服務星期';
+EXEC dbo.usp_add_column_description N'organizer_profiles', N'service_start_time', N'服務開始時間';
+EXEC dbo.usp_add_column_description N'organizer_profiles', N'service_end_time', N'服務結束時間';
 
 EXEC dbo.usp_add_column_description N'vendor_images', N'id', N'照片 ID';
-EXEC dbo.usp_add_column_description N'vendor_images', N'vendor_id', N'品牌 ID';
+EXEC dbo.usp_add_column_description N'vendor_images', N'vendor_profile_id', N'攤主品牌資料 ID';
 EXEC dbo.usp_add_column_description N'vendor_images', N'image_type', N'圖片類型';
 EXEC dbo.usp_add_column_description N'vendor_images', N'image_url', N'圖片路徑';
 
 EXEC dbo.usp_add_column_description N'vendor_products', N'id', N'商品 ID';
-EXEC dbo.usp_add_column_description N'vendor_products', N'vendor_id', N'品牌 ID';
+EXEC dbo.usp_add_column_description N'vendor_products', N'vendor_profile_id', N'攤主品牌資料 ID';
 EXEC dbo.usp_add_column_description N'vendor_products', N'name', N'商品名稱';
 EXEC dbo.usp_add_column_description N'vendor_products', N'short_description', N'商品簡介';
 EXEC dbo.usp_add_column_description N'vendor_products', N'description', N'商品介紹';
@@ -525,7 +608,7 @@ EXEC dbo.usp_add_column_description N'market_events', N'base_fee', N'基本攤�
 EXEC dbo.usp_add_column_description N'market_events', N'cover_image_url', N'活動封面';
 EXEC dbo.usp_add_column_description N'market_events', N'map_image_url', N'攤位地圖底圖';
 EXEC dbo.usp_add_column_description N'market_events', N'public_info_at', N'公開資訊時間';
-EXEC dbo.usp_add_column_description N'market_events', N'review_status', N'活動審核狀態（APPROVED/REJECTED/REVISION_REQUIRED）';
+EXEC dbo.usp_add_column_description N'market_events', N'review_status', N'活動審核狀態（APPROVED/REJECTED/REVISION_REQUIRED/CANCELLED）';
 EXEC dbo.usp_add_column_description N'market_events', N'review_note', N'補件原因 / 審核備註';
 EXEC dbo.usp_add_column_description N'market_events', N'publish_status', N'活動發布狀態（DRAFT/PUBLISHED/UNPUBLISHED/CANCELLED）';
 
@@ -558,7 +641,7 @@ EXEC dbo.usp_add_column_description N'event_applications', N'id', N'報名 ID';
 EXEC dbo.usp_add_column_description N'event_applications', N'application_no', N'報名編號';
 EXEC dbo.usp_add_column_description N'event_applications', N'event_id', N'活動 ID';
 EXEC dbo.usp_add_column_description N'event_applications', N'user_id', N'攤主 ID';
-EXEC dbo.usp_add_column_description N'event_applications', N'vendor_id', N'品牌 ID';
+EXEC dbo.usp_add_column_description N'event_applications', N'vendor_profile_id', N'攤主品牌資料 ID';
 EXEC dbo.usp_add_column_description N'event_applications', N'selected_stall_id', N'選擇的活動攤位';
 EXEC dbo.usp_add_column_description N'event_applications', N'vehicle_no', N'車牌';
 EXEC dbo.usp_add_column_description N'event_applications', N'applicant_note', N'攤主備註';

@@ -10,11 +10,13 @@
 
 目前包含的核心資料表例如：
 
-- `users`：使用者帳號資料，包含 LOCAL / GOOGLE 登入來源、角色、狀態等欄位
-- `categories`：活動與攤位共用分類，不再用 `type` 區分分類用途
-- `vendors`：攤位資料，包含負責人姓名、縣市、區與詳細地址
-- `vendor_images`：攤位圖片，圖片類型包含 `AVATAR`、`COVER`、`GALLERY`
-- `vendor_products`：攤位商品
+- `users`：使用者帳號資料，包含 LOCAL / GOOGLE 登入來源、角色、狀態、`expired_time` 與 `updated_at`
+- `categories`：活動與品牌共用分類，不再用 `type` 區分分類用途
+- `user_profiles`：攤主與主辦方共用個人/單位資料，包含聯絡人、電話、Email 與地址
+- `vendor_profiles`：攤主品牌專屬資料，包含分類、社群連結、品牌資訊與商品摘要
+- `organizer_profiles`：主辦方專屬資料，包含公司名稱、統一編號與服務時間
+- `vendor_images`：品牌圖片，關聯 `vendor_profiles`，圖片類型包含 `AVATAR`、`COVER`、`GALLERY`
+- `vendor_products`：品牌商品，關聯 `vendor_profiles`
 - `market_events`：市集活動，包含發布狀態與活動審核狀態
 - `event_sessions`：活動場次
 - `event_images`：活動圖片
@@ -37,7 +39,7 @@
 
 - 各資料表的主要責任
 - foreign key 關聯方向
-- 使用者、攤位、活動、攤位分區、活動攤位、報名、付款、退款之間的流程關係
+- 使用者、品牌、活動、攤位分區、活動攤位、報名、付款、退款之間的流程關係
 - 修改資料表時可能影響到的相依表
 
 ## 輔助檔案
@@ -109,7 +111,7 @@ spring.datasource.url=jdbc:sqlserver://localhost:1433;databaseName=MarketDayDB;e
 - Swagger schema 是否需要同步更新
 - `test.sql` 是否需要補測試資料
 
-近期 schema 已補上活動審核、攤位選位、保證金與退款流程；若後端開始實作這些功能，需同步檢查相關 Entity / DTO / API 文件是否已包含 `review_status`、`review_note`、`selected_stall_id`、`deposit_amount`、`deposit_status`、`event_stalls` 與 `refunds`。
+近期 schema 已調整 `users` 的自動登出與更新時間欄位，並將原本 `vendors` 品牌資料拆成 `user_profiles`、`vendor_profiles`、`organizer_profiles`。若後端開始實作這些功能，需同步檢查相關 Entity / DTO / API 文件是否已包含 `expired_time`、`user_profiles`、`vendor_profiles`、`organizer_profiles`、`vendor_profile_id`、`review_status`、`review_note`、`selected_stall_id`、`deposit_amount`、`deposit_status`、`event_stalls` 與 `refunds`。
 
 若變更 `users` 欄位，請特別檢查：
 
