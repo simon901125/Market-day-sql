@@ -137,7 +137,6 @@ public class StallService {
         event.put("startDate", applicationData.get("startDate"));
         event.put("endDate", applicationData.get("endDate"));
         event.put("address", applicationData.get("address"));
-        event.put("mapImageUrl", applicationData.get("mapImageUrl"));
 
         Map<String, Object> response = new LinkedHashMap<>();
         response.put("application", application);

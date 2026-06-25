@@ -126,9 +126,6 @@ spring.mail.password=<YOUR_GMAIL_APP_PASSWORD>
 spring.mail.properties.mail.smtp.auth=true
 spring.mail.properties.mail.smtp.starttls.enable=true
 
-app.upload-dir=F:/MarketDay/demo/uploads
-app.upload-url-prefix=/uploads
-
 server.port=8081
 springdoc.swagger-ui.path=/swagger-ui/marketDay/index.html
 ```

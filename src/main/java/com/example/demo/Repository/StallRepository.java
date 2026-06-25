@@ -138,8 +138,7 @@ public class StallRepository {
                     e.title AS eventTitle,
                     e.address,
                     e.start_date AS startDate,
-                    e.end_date AS endDate,
-                    e.map_image_url AS mapImageUrl
+                    e.end_date AS endDate
                 FROM dbo.event_applications a
                 INNER JOIN dbo.vendor_profiles vp ON vp.id = a.vendor_profile_id
                 INNER JOIN dbo.user_profiles up ON up.id = vp.user_profile_id
