@@ -1,8 +1,9 @@
-<!doctype html>
+﻿<!doctype html>
+<!-- Local test URL: http://localhost:8081/test.html -->
 <html lang="zh-Hant">
   <head>
     <meta charset="UTF-8" />
-    <title>API Test</title>
+    <title>Google Credential Test</title>
     <script src="https://accounts.google.com/gsi/client" async defer></script>
     <style>
       body {
@@ -10,168 +11,43 @@
         margin: 32px;
       }
 
-      section {
-        margin-bottom: 28px;
-        padding-bottom: 20px;
-        border-bottom: 1px solid #ddd;
-      }
-
-      label {
-        display: block;
-        margin: 10px 0;
-      }
-
-      input,
-      select {
-        display: block;
-        width: 320px;
-        max-width: 100%;
-        margin-top: 4px;
-        padding: 7px;
-      }
-
       button {
-        margin: 8px 8px 8px 0;
+        margin: 12px 0;
         padding: 8px 12px;
       }
 
       pre {
-        margin-top: 20px;
+        margin-top: 16px;
+        max-width: 100%;
         padding: 12px;
+        overflow-wrap: anywhere;
+        white-space: pre-wrap;
         background: #111827;
         color: #e5e7eb;
-        white-space: pre-wrap;
       }
     </style>
   </head>
   <body>
-    <h1>API Test</h1>
+    <h1>Google Credential Test</h1>
 
-    <section>
-      <h2>Local Register / Login Test</h2>
+    <p>Sign in with Google to get a credential for Swagger testing.</p>
+    <div id="googleButton"></div>
 
-      <label>
-        Role
-        <select id="roleInput">
-          <option value="VENDOR">VENDOR</option>
-          <option value="ORGANIZER">ORGANIZER</option>
-          <option value="ADMIN">ADMIN</option>
-        </select>
-      </label>
-
-      <label>
-        Name
-        <input id="nameInput" type="text" value="Local Test User" />
-      </label>
-
-      <label>
-        Email
-        <input id="emailInput" type="email" value="local-test@example.test" />
-      </label>
-
-      <label>
-        Password
-        <input id="passwordInput" type="password" value="LocalTest123" />
-      </label>
-
-      <label>
-        Phone
-        <input id="phoneInput" type="text" value="+886900000000" />
-      </label>
-
-      <button type="button" id="registerLocalBtn">
-        Test POST /api/auth/register/local
-      </button>
-      <button type="button" id="loginLocalBtn">
-        Test POST /api/auth/login/local
-      </button>
-    </section>
-
-    <section>
-      <h2>Google Register / Login Test</h2>
-
-      <p>Step 1: Sign in with Google to get credential.</p>
-      <div id="googleButton"></div>
-
-      <p>Step 2: Use the credential to test backend Google APIs.</p>
-      <button type="button" id="registerGoogleBtn" disabled>
-        Test POST /api/auth/register/google
-      </button>
-      <button type="button" id="loginGoogleBtn" disabled>
-        Test POST /api/auth/login/google
-      </button>
-    </section>
-
-    <pre id="result">Waiting for action...</pre>
+    <button type="button" id="copyBtn" disabled>Copy credential</button>
+    <pre id="credentialOutput">Waiting for Google sign in...</pre>
 
     <script>
-      const API_BASE_URL = "http://localhost:8080";
-      const GOOGLE_CLIENT_ID = "322007662830-udt5d156946h171o1edm93bj6pfu16cj.apps.googleusercontent.com";
+      const GOOGLE_CLIENT_ID =
+        "YOUR_GOOGLE_CLIENT_ID.apps.googleusercontent.com";
 
-      const result = document.getElementById("result");
-      const registerLocalBtn = document.getElementById("registerLocalBtn");
-      const loginLocalBtn = document.getElementById("loginLocalBtn");
-      const registerGoogleBtn = document.getElementById("registerGoogleBtn");
-      const loginGoogleBtn = document.getElementById("loginGoogleBtn");
-
+      const copyBtn = document.getElementById("copyBtn");
+      const credentialOutput = document.getElementById("credentialOutput");
       let googleCredential = "";
-
-      function show(title, body) {
-        result.textContent = title + "\n\n" + body;
-      }
-
-      function getLocalFormData() {
-        return {
-          role: document.getElementById("roleInput").value,
-          name: document.getElementById("nameInput").value,
-          email: document.getElementById("emailInput").value,
-          password: document.getElementById("passwordInput").value,
-          phone: document.getElementById("phoneInput").value,
-        };
-      }
-
-      async function postJson(path, data, options = {}) {
-        show("Sending request", path + "\n\n" + JSON.stringify(data, null, 2));
-
-        try {
-          const apiResponse = await fetch(API_BASE_URL + path, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify(data),
-          });
-
-          const text = await apiResponse.text();
-          show("HTTP " + apiResponse.status, text);
-
-          if (options.redirectOnToken) {
-            handleAuthResponse(text);
-          }
-        } catch (error) {
-          show("Request failed", String(error));
-        }
-      }
-
-      function handleAuthResponse(text) {
-        try {
-          const data = JSON.parse(text);
-          if (!data.token) {
-            return;
-          }
-
-          localStorage.setItem("jwtToken", data.token);
-          localStorage.setItem("loginUser", JSON.stringify(data.user || {}));
-          window.location.href = "test_2.html";
-        } catch (error) {
-          show("Login response parse failed", String(error));
-        }
-      }
 
       window.onload = function () {
         google.accounts.id.initialize({
           client_id: GOOGLE_CLIENT_ID,
-          callback: handleGoogleLogin,
+          callback: handleGoogleCredential,
         });
 
         google.accounts.id.renderButton(
@@ -184,42 +60,19 @@
         );
       };
 
-      registerLocalBtn.addEventListener("click", function () {
-        postJson("/api/auth/register/local", getLocalFormData());
-      });
-
-      loginLocalBtn.addEventListener("click", function () {
-        const formData = getLocalFormData();
-        postJson("/api/auth/login/local", {
-          email: formData.email,
-          password: formData.password,
-        }, { redirectOnToken: true });
-      });
-
-      function handleGoogleLogin(response) {
+      function handleGoogleCredential(response) {
         googleCredential = response.credential;
-        registerGoogleBtn.disabled = false;
-        loginGoogleBtn.disabled = false;
-        show("Google credential received", "You can now test Google register/login APIs.");
+        credentialOutput.textContent = googleCredential;
+        copyBtn.disabled = false;
       }
 
-      function postGoogleApi(path) {
+      copyBtn.addEventListener("click", async function () {
         if (!googleCredential) {
-          show("Missing credential", "Sign in with Google first.");
           return;
         }
 
-        postJson(path, {
-          credential: googleCredential,
-        }, { redirectOnToken: path === "/api/auth/login/google" });
-      }
-
-      registerGoogleBtn.addEventListener("click", function () {
-        postGoogleApi("/api/auth/register/google");
-      });
-
-      loginGoogleBtn.addEventListener("click", function () {
-        postGoogleApi("/api/auth/login/google");
+        await navigator.clipboard.writeText(googleCredential);
+        copyBtn.textContent = "Copied";
       });
     </script>
   </body>

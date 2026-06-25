@@ -1,0 +1,330 @@
+package com.example.demo.Repository;
+
+import java.time.LocalDateTime;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
+import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
+import org.springframework.jdbc.support.GeneratedKeyHolder;
+import org.springframework.jdbc.support.KeyHolder;
+import org.springframework.stereotype.Repository;
+
+import com.example.demo.entity.Users;
+
+@Repository
+public class UserRepository {
+
+    @Autowired
+    private NamedParameterJdbcTemplate namedParameterJdbcTemplate;
+
+    public static final String TOKEN_TYPE_EMAIL_VERIFY = "EMAIL_VERIFY";
+    public static final String TOKEN_TYPE_PASSWORD_RESET = "PASSWORD_RESET";
+
+    public List<Users> findAllUsers() {
+        String sql = """
+                SELECT id, role, name, email, password_hash, phone, provider, status, isLogin, email_verified_at, expired_time, created_at, updated_at
+                FROM users
+                """;
+
+        return namedParameterJdbcTemplate.query(sql, (rs, rowNum) -> {
+            Users user = new Users();
+            user.setId(rs.getLong("id"));
+            user.setRole(rs.getString("role"));
+            user.setName(rs.getString("name"));
+            user.setEmail(rs.getString("email"));
+            user.setPasswordHash(rs.getString("password_hash"));
+            user.setPhone(rs.getString("phone"));
+            user.setProvider(rs.getString("provider"));
+            user.setStatus(rs.getString("status"));
+            user.setIsLogin(rs.getBoolean("isLogin"));
+            user.setEmailVerifiedAt(rs.getObject("email_verified_at", LocalDateTime.class));
+            user.setExpiredTime(rs.getObject("expired_time", LocalDateTime.class));
+            user.setCreatedAt(rs.getObject("created_at", LocalDateTime.class));
+            user.setUpdatedAt(rs.getObject("updated_at", LocalDateTime.class));
+            return user;
+        });
+    }
+
+    public boolean existsByEmail(String email) {
+        String sql = "SELECT COUNT(*) FROM users WHERE email = :email";
+        Map<String, Object> map = new HashMap<>();
+        map.put("email", email);
+        Integer count = namedParameterJdbcTemplate.queryForObject(sql, map, Integer.class);
+        return count != null && count > 0;
+    }
+
+    public Long createLocalUser(String role, String name, String email, String passwordHash, String phone) {
+        String sql = """
+                INSERT INTO users (role, name, email, password_hash, phone, provider)
+                VALUES (:role, :name, :email, :passwordHash, :phone, :provider)
+                """;
+        MapSqlParameterSource params = new MapSqlParameterSource()
+                .addValue("role", role)
+                .addValue("name", name)
+                .addValue("email", email)
+                .addValue("passwordHash", passwordHash)
+                .addValue("phone", phone)
+                .addValue("provider", "LOCAL");
+        KeyHolder keyHolder = new GeneratedKeyHolder();
+        namedParameterJdbcTemplate.update(sql, params, keyHolder, new String[] {"id"});
+        return keyHolder.getKey().longValue();
+    }
+
+    public Long createGoogleUser(String role, String name, String email) {
+        String sql = """
+                INSERT INTO users (role, name, email, password_hash, phone, provider)
+                VALUES (:role, :name, :email, :passwordHash, :phone, :provider)
+                """;
+
+        MapSqlParameterSource params = new MapSqlParameterSource()
+                .addValue("role", role)
+                .addValue("name", name)
+                .addValue("email", email)
+                .addValue("passwordHash", null)
+                .addValue("phone", null)
+                .addValue("provider", "GOOGLE");
+        KeyHolder keyHolder = new GeneratedKeyHolder();
+        namedParameterJdbcTemplate.update(sql, params, keyHolder, new String[] {"id"});
+        return keyHolder.getKey().longValue();
+    }
+
+    public Optional<Map<String, Object>> findLocalUserByEmail(String email) {
+        String sql = """
+                SELECT id, role, name, email, password_hash, phone, provider, status, isLogin,
+                       email_verified_at AS emailVerifiedAt,
+                       expired_time AS expiredTime,
+                       created_at AS createdAt,
+                       updated_at AS updatedAt
+                FROM users
+                WHERE email = :email
+                  AND provider = :provider
+                """;
+        Map<String, Object> map = new HashMap<>();
+        map.put("email", email);
+        map.put("provider", "LOCAL");
+        List<Map<String, Object>> list = namedParameterJdbcTemplate.queryForList(sql, map);
+        return RepositoryResultMapper.normalizeOptional(list.stream().findFirst());
+    }
+
+    public Optional<Map<String, Object>> findProfileByEmail(String email) {
+        String sql = """
+                SELECT id, role, name, email, phone, provider, status, isLogin,
+                       email_verified_at AS emailVerifiedAt,
+                       expired_time AS expiredTime,
+                       created_at AS createdAt,
+                       updated_at AS updatedAt
+                FROM users
+                WHERE email = :email
+                """;
+        Map<String, Object> map = new HashMap<>();
+        map.put("email", email);
+        List<Map<String, Object>> list = namedParameterJdbcTemplate.queryForList(sql, map);
+        return RepositoryResultMapper.normalizeOptional(list.stream().findFirst());
+    }
+
+    public int updateProfileByEmail(String email, String name, String phone) {
+        String sql = """
+                UPDATE users
+                SET name = COALESCE(:name, name),
+                    phone = COALESCE(:phone, phone),
+                    updated_at = SYSDATETIME()
+                WHERE email = :email
+                """;
+        Map<String, Object> map = new HashMap<>();
+        map.put("name", name);
+        map.put("phone", phone);
+        map.put("email", email);
+        return namedParameterJdbcTemplate.update(sql, map);
+    }
+
+    public boolean existsActiveVendorApplication(Long userId) {
+        String sql = """
+                SELECT COUNT(*)
+                FROM event_applications
+                WHERE user_id = :userId
+                  AND is_cancelled = 0
+                """;
+        Map<String, Object> map = new HashMap<>();
+        map.put("userId", userId);
+        Integer count = namedParameterJdbcTemplate.queryForObject(sql, map, Integer.class);
+        return count != null && count > 0;
+    }
+
+    public boolean existsActiveOrganizerEvent(Long userId) {
+        String sql = """
+                SELECT COUNT(*)
+                FROM market_events
+                WHERE user_id = :userId
+                  AND (publish_status IS NULL OR publish_status <> N'CANCELLED')
+                """;
+        Map<String, Object> map = new HashMap<>();
+        map.put("userId", userId);
+        Integer count = namedParameterJdbcTemplate.queryForObject(sql, map, Integer.class);
+        return count != null && count > 0;
+    }
+
+    public int deactivateUserById(Long userId) {
+        String sql = """
+                UPDATE users
+                SET status = 'IS_DELETED',
+                    isLogin = 0,
+                    updated_at = SYSDATETIME()
+                WHERE id = :userId
+                  AND status = 'ACTIVE'
+                """;
+        Map<String, Object> map = new HashMap<>();
+        map.put("userId", userId);
+        return namedParameterJdbcTemplate.update(sql, map);
+    }
+
+    public int markLoginById(Long userId, int timeoutHours) {
+        String sql = """
+                UPDATE users
+                SET isLogin = 1,
+                    expired_time = DATEADD(HOUR, :timeoutHours, SYSDATETIME())
+                WHERE id = :userId
+                """;
+        Map<String, Object> map = new HashMap<>();
+        map.put("userId", userId);
+        map.put("timeoutHours", timeoutHours);
+        return namedParameterJdbcTemplate.update(sql, map);
+    }
+
+    public int markLogoutByEmail(String email) {
+        String sql = """
+                UPDATE users
+                SET isLogin = 0
+                WHERE email = :email
+                """;
+        Map<String, Object> map = new HashMap<>();
+        map.put("email", email);
+        return namedParameterJdbcTemplate.update(sql, map);
+    }
+
+    public int autoLogoutExpiredUsers() {
+        String sql = """
+                UPDATE users
+                SET isLogin = 0
+                WHERE isLogin = 1
+                  AND expired_time <= SYSDATETIME()
+                """;
+        return namedParameterJdbcTemplate.update(sql, Map.of());
+    }
+
+    public int updateExpiredTimeByEmail(String email, int timeoutHours) {
+        String sql = """
+                UPDATE users
+                SET expired_time = DATEADD(HOUR, :timeoutHours, SYSDATETIME())
+                WHERE email = :email
+                  AND status = 'ACTIVE'
+                  AND isLogin = 1
+                  AND expired_time > SYSDATETIME()
+                """;
+        Map<String, Object> map = new HashMap<>();
+        map.put("email", email);
+        map.put("timeoutHours", timeoutHours);
+        return namedParameterJdbcTemplate.update(sql, map);
+    }
+
+    public int updateLocalPasswordByEmail(String email, String passwordHash) {
+        String sql = """
+                UPDATE users
+                SET password_hash = :passwordHash,
+                    updated_at = SYSDATETIME()
+                WHERE email = :email
+                  AND provider = :provider
+                """;
+        Map<String, Object> map = new HashMap<>();
+        map.put("email", email);
+        map.put("passwordHash", passwordHash);
+        map.put("provider", "LOCAL");
+        return namedParameterJdbcTemplate.update(sql, map);
+    }
+
+    public void createEmailVerificationToken(Long userId, String token, LocalDateTime expiresAt) {
+        createUserToken(userId, token, TOKEN_TYPE_EMAIL_VERIFY, expiresAt);
+    }
+
+    public void createUserToken(Long userId, String token, String tokenType, LocalDateTime expiresAt) {
+        String sql = """
+                INSERT INTO user_tokens (user_id, token, token_type, expires_at)
+                VALUES (:userId, :token, :tokenType, :expiresAt)
+                """;
+        Map<String, Object> map = new HashMap<>();
+        map.put("userId", userId);
+        map.put("token", token);
+        map.put("tokenType", tokenType);
+        map.put("expiresAt", expiresAt);
+        namedParameterJdbcTemplate.update(sql, map);
+    }
+
+    public int deleteEmailVerificationTokensByUserId(Long userId) {
+        return deleteUserTokensByUserId(userId, TOKEN_TYPE_EMAIL_VERIFY);
+    }
+
+    public int deleteUserTokensByUserId(Long userId, String tokenType) {
+        String sql = """
+                DELETE FROM user_tokens
+                WHERE user_id = :userId
+                  AND token_type = :tokenType
+                """;
+        Map<String, Object> map = new HashMap<>();
+        map.put("userId", userId);
+        map.put("tokenType", tokenType);
+        return namedParameterJdbcTemplate.update(sql, map);
+    }
+
+    public Optional<Map<String, Object>> findEmailVerificationCode(String email, String code) {
+        return findVerificationCode(email, code, TOKEN_TYPE_EMAIL_VERIFY);
+    }
+
+    public Optional<Map<String, Object>> findVerificationCode(String email, String code, String tokenType) {
+        String sql = """
+                SELECT user_tokens.id, user_tokens.user_id, user_tokens.token, user_tokens.token_type,
+                       user_tokens.expires_at, users.email, users.status, users.email_verified_at
+                FROM user_tokens
+                    INNER JOIN users ON users.id = user_tokens.user_id
+                WHERE users.email = :email
+                  AND user_tokens.token = :code
+                  AND user_tokens.token_type = :tokenType
+                """;
+        Map<String, Object> map = new HashMap<>();
+        map.put("email", email);
+        map.put("code", code);
+        map.put("tokenType", tokenType);
+        List<Map<String, Object>> list = namedParameterJdbcTemplate.queryForList(sql, map);
+        return RepositoryResultMapper.normalizeOptional(list.stream().findFirst());
+    }
+
+    public int markEmailVerified(Long userId) {
+        String sql = """
+                UPDATE users
+                SET email_verified_at = COALESCE(email_verified_at, SYSDATETIME()),
+                    status = 'ACTIVE'
+                WHERE id = :userId
+                """;
+        Map<String, Object> map = new HashMap<>();
+        map.put("userId", userId);
+        return namedParameterJdbcTemplate.update(sql, map);
+    }
+
+    public int deleteEmailVerificationToken(Long tokenId) {
+        return deleteUserToken(tokenId, TOKEN_TYPE_EMAIL_VERIFY);
+    }
+
+    public int deleteUserToken(Long tokenId, String tokenType) {
+        String sql = """
+                DELETE FROM user_tokens
+                WHERE id = :tokenId
+                  AND token_type = :tokenType
+                """;
+        Map<String, Object> map = new HashMap<>();
+        map.put("tokenId", tokenId);
+        map.put("tokenType", tokenType);
+        return namedParameterJdbcTemplate.update(sql, map);
+    }
+}

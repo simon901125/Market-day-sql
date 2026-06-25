@@ -1,213 +1,276 @@
 # Swagger / OpenAPI 設計規範
 
-本文件整理本專案 Swagger / OpenAPI 的使用方式，後續新增 API 時可直接依照此規範撰寫。
+本文件整理本專案 Swagger / OpenAPI 的使用方式。後續新增 API 時，請同步更新 Controller annotation、Request DTO schema 與本文件 API 清單。
 
-## 1. 使用套件
+## 1. Swagger UI
 
-本專案使用 `springdoc-openapi`：
-
-```xml
-<dependency>
-    <groupId>org.springdoc</groupId>
-    <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
-    <version>2.8.17</version>
-</dependency>
-```
-
-啟動 Spring Boot 後可透過以下網址查看：
+啟動 Spring Boot 後可開啟：
 
 ```text
-http://localhost:8080/swagger-ui/index.html
-http://localhost:8080/v3/api-docs
+http://localhost:8081/swagger-ui/marketDay/index.html
 ```
 
-## 2. 檔案位置
-
-Swagger 相關檔案集中放在：
+OpenAPI JSON：
 
 ```text
-demo/src/main/java/com/example/demo/swagger
+http://localhost:8081/v3/api-docs
 ```
 
-目前包含：
+Swagger UI 路徑由 `application.properties` 控制：
+
+```properties
+springdoc.swagger-ui.path=/swagger-ui/marketDay/index.html
+```
+
+## 2. Swagger 與 DTO 位置
+
+OpenAPI 設定：
 
 ```text
-OpenApiConfig.java
-LocalRegisterRequest.java
-LocalLoginRequest.java
-GoogleCredentialRequest.java
+src/main/java/com/example/demo/swagger/OpenApiConfig.java
+```
+
+Request DTO：
+
+```text
+src/main/java/com/example/demo/dto
 ```
 
 規則：
 
-- OpenAPI 全域設定放在 `OpenApiConfig.java`
-- Request body schema DTO 放在 `swagger` package
-- Controller 需要 request body 時，優先使用 DTO，不要直接用 `Map<String, String>`
+- `swagger` package 只放 Swagger/OpenAPI 設定。
+- Request body schema DTO 放在 `dto` package。
+- Controller 若需要 request body，優先建立 DTO，不要直接使用 `Map<String, String>`。
 
-## 3. OpenAPI 全域設定
+## 3. OpenAPI 設定
 
-`OpenApiConfig.java` 負責設定：
+`OpenApiConfig.java` 目前包含：
 
-- API 文件標題
-- API 文件描述
+- API 標題
+- API 描述
 - JWT Bearer security scheme
 
-目前使用的 security scheme 名稱：
+JWT security scheme 名稱：
 
 ```text
 bearerAuth
 ```
 
-需要 JWT 的 API 要加：
+需要 JWT 的 Controller method 請加：
 
 ```java
 @SecurityRequirement(name = "bearerAuth")
 ```
 
-## 4. Controller 註解規範
+## 4. Controller 標註
 
-Controller 類別使用：
+Controller class 使用 `@Tag`：
 
 ```java
-@Tag(name = "使用者與驗證 API", description = "使用者註冊、登入、登出與目前登入者資訊 API")
+@Tag(name = "主辦方 API", description = "主辦方資料與活動報名管理")
 ```
 
-每個 API 使用：
+API method 使用 `@Operation`：
 
 ```java
-@Operation(summary = "本地端登入", description = "使用 email/password 登入，成功後回傳 JWT token。")
+@Operation(
+    summary = "取得主辦方報名列表",
+    description = "根據 Authorization JWT 取得目前登入主辦方，查詢該主辦方所有已發布活動的報名資料。"
+)
 ```
 
-規則：
+撰寫原則：
 
-- `summary` 使用短句，描述 API 做什麼
-- `description` 補充流程、驗證、回傳重點
-- 顯示文字統一使用繁體中文
+- `summary` 用一句話描述 API 目的。
+- `description` 補充驗證方式、主要查詢條件與回傳內容。
+- 需要 JWT 的 API 加上 `@SecurityRequirement(name = "bearerAuth")`。
+- Swagger 註解請使用中文，且與目前實作同步。
 
-## 5. Request Body Schema DTO
+## 5. Request DTO 標註
 
-需要 request body 的 API，建立明確 DTO，例如：
+Request DTO 範例：
 
 ```java
-@Schema(description = "本地端登入請求資料")
+package com.example.demo.dto;
+
+import io.swagger.v3.oas.annotations.media.Schema;
+import jakarta.validation.constraints.Email;
+import jakarta.validation.constraints.NotBlank;
+
+@Schema(description = "本地端登入請求")
 public class LocalLoginRequest {
 
-    @Schema(description = "使用者 Email", example = "local-test@example.test")
+    @NotBlank(message = "Email is required")
+    @Email(message = "Invalid email format")
+    @Schema(description = "登入 Email", example = "user@example.com")
     private String email;
-
-    @Schema(description = "使用者密碼", example = "LocalTest123")
-    private String password;
 }
 ```
 
-Controller 使用：
+Controller 使用 DTO 時需加 `@Valid`：
 
 ```java
-@PostMapping("/api/auth/login/local")
-public Map<String, Object> login(@RequestBody LocalLoginRequest body) {
-    ...
+@PostMapping("/api/vendor/local-login")
+public Map<String, Object> vendorLogin(@Valid @RequestBody LocalLoginRequest body) {
+    return userService.loginLocal(body, "VENDOR");
 }
 ```
 
-這樣 Swagger 的 `Schema` 與 `Example Value` 會自動顯示欄位與範例。
+常見 DTO 驗證：
 
-## 6. 欄位註解規範
+| 欄位 | 驗證 |
+| --- | --- |
+| email | `@Email` |
+| code | 6 位數字 |
+| password | 至少 8 碼，需包含英文字母與數字 |
+| phone | 10 位數字，且以 `09` 開頭 |
+| name | 最多 20 字 |
+| applicationNo | 報名編號 |
+| stallNo | 攤位編號，例如 `A01` |
+| credential | Google token |
 
-每個 request DTO 欄位都建議補：
+DTO 驗證錯誤由 `GlobalExceptionHandler` 統一回傳 `400 Bad Request`。
 
-```java
-@Schema(description = "欄位說明", example = "範例值")
-```
+## 6. 統一 API Response
 
-若欄位有固定值，補 `allowableValues`：
-
-```java
-@Schema(
-    description = "使用者角色",
-    example = "VENDOR",
-    allowableValues = {"VENDOR", "ORGANIZER", "ADMIN"}
-)
-private String role;
-```
-
-## 7. JWT API 規範
-
-需要登入後才能使用的 API：
+Controller 可以直接回傳 service 結果：
 
 ```java
-@Operation(summary = "取得目前登入者資訊", description = "需要在 Authorization header 帶入 Bearer JWT，回傳目前登入者資料。")
-@SecurityRequirement(name = "bearerAuth")
-@GetMapping("/api/auth/me")
+public Map<String, Object> me(...) {
+    return userService.getCurrentUser(authorizationHeader);
+}
 ```
 
-Swagger UI 測試方式：
+`GlobalResponseAdvice` 會在 response body 寫出前統一包裝：
 
-1. 呼叫登入 API 取得 JWT
-2. 點 Swagger UI 右上角 `Authorize`
+```json
+{
+  "statusCode": 200,
+  "message": "User info retrieved successfully",
+  "messageDetails": "Executed API: GET /api/auth/me",
+  "data": {
+    "user": {}
+  }
+}
+```
+
+若 Controller 回傳已經是 `ApiResponse`，不會重複包裝。成功回覆會由 `GlobalResponseAdvice` 自動補上 `messageDetails`：
+
+```text
+Executed API: <HTTP_METHOD> <API_PATH>
+```
+
+詳細 response 格式請看：
+
+```text
+api-response.md
+```
+
+## 7. JWT API
+
+Swagger UI 測試 JWT API：
+
+1. 呼叫登入 API 取得 JWT。
+2. 點 Swagger UI 右上角 `Authorize`。
 3. 輸入：
 
 ```text
 Bearer <JWT_TOKEN>
 ```
 
-4. 再呼叫需要登入的 API
+目前 `JwtAuthenticationFilter` 保護的 API：
 
-## 8. 新增 API 時的建議流程
+| Method | API |
+| --- | --- |
+| POST | `/api/auth/logout` |
+| GET | `/api/auth/me` |
+| POST | `/api/users/me` |
+| POST | `/api/account/deactivate` |
+| GET | `/api/vendor/account` |
+| GET | `/api/organizer/account` |
 
-1. 先確認 API 是否需要 request body
-2. 若需要 request body，新增 DTO 到 `com.example.demo.swagger`
-3. 在 DTO 欄位補 `@Schema(description, example)`
-4. Controller 方法使用 DTO 作為 `@RequestBody`
-5. Controller 方法補 `@Operation`
-6. 若 API 需要 JWT，補 `@SecurityRequirement(name = "bearerAuth")`
-7. 執行編譯確認
+注意：`GET /api/organizer/applications/search` 目前由 `OrganizerService` 解析 `Authorization`，但尚未加入 `JwtAuthenticationFilter.protectedApis`。
+
+## 8. 新增 API 檢查清單
+
+1. 確認是否需要 request body。
+2. 需要 request body 時，建立 DTO 到 `com.example.demo.dto`。
+3. DTO 欄位加上 `@Schema` 與 Bean Validation。
+4. Controller 使用 `@Valid @RequestBody DTO`。
+5. Controller method 加上 `@Operation`。
+6. Controller class 或 method 加上 `@Tag` / `@SecurityRequirement`。
+7. 需要登入驗證時，確認是否要加入 `JwtAuthenticationFilter.protectedApis`。
+8. Repository 回傳 `Map` 時，確認欄位命名已使用前端需要的 camelCase。
+9. 補充或更新 `README.md`、`api-response.md`、`swagger.md`。
+10. 執行：
 
 ```powershell
-.\mvnw.cmd -q -DskipTests compile
+.\mvnw.cmd clean compile
 ```
 
-## 9. 範本
+## 9. API 清單
 
-Request DTO：
+### 使用者與驗證 API
 
-```java
-package com.example.demo.swagger;
+| Method | API | Request DTO | JWT | 說明 |
+| --- | --- | --- | --- | --- |
+| GET | `/usersall` | - | 否 | 取得所有 users |
+| POST | `/api/vendor/local-register` | `LocalRegisterRequest` | 否 | 攤主本地端註冊 |
+| POST | `/api/organizer/local-register` | `LocalRegisterRequest` | 否 | 主辦方本地端註冊 |
+| POST | `/api/admin/local-register` | `LocalRegisterRequest` | 否 | 管理員本地端註冊 |
+| POST | `/api/vendor/google-register` | `GoogleCredentialRequest` | 否 | 攤主 Google 註冊 |
+| POST | `/api/organizer/google-register` | `GoogleCredentialRequest` | 否 | 主辦方 Google 註冊 |
+| POST | `/api/admin/google-register` | `GoogleCredentialRequest` | 否 | 管理員 Google 註冊 |
+| POST | `/api/vendor/local-login` | `LocalLoginRequest` | 否 | 攤主本地端登入 |
+| POST | `/api/organizer/local-login` | `LocalLoginRequest` | 否 | 主辦方本地端登入 |
+| POST | `/api/admin/local-login` | `LocalLoginRequest` | 否 | 管理員本地端登入 |
+| POST | `/api/vendor/google-login` | `GoogleCredentialRequest` | 否 | 攤主 Google 登入 |
+| POST | `/api/organizer/google-login` | `GoogleCredentialRequest` | 否 | 主辦方 Google 登入 |
+| POST | `/api/admin/google-login` | `GoogleCredentialRequest` | 否 | 管理員 Google 登入 |
+| POST | `/api/auth/createAccount/emailVerify` | `EmailVerificationRequest` | 否 | 建立帳號 email 驗證 |
+| POST | `/api/auth/resetPassword/emailVerify` | `EmailVerificationRequest` | 否 | 忘記密碼 email 驗證 |
+| POST | `/api/auth/resetPassword/reset` | `ResetPasswordRequest` | 否 | 重設密碼 |
+| POST | `/api/auth/logout` | - | 是 | 登出 |
+| GET | `/api/auth/me` | - | 是 | 取得目前登入者資料 |
+| POST | `/api/users/me` | `UpdateUserProfileRequest` | 是 | 更新目前登入者資料 |
+| POST | `/api/account/deactivate` | - | 是 | 停用目前登入帳號 |
 
-import io.swagger.v3.oas.annotations.media.Schema;
+### 攤主與攤位 API
 
-@Schema(description = "範例請求資料")
-public class ExampleRequest {
+| Method | API | Request DTO | JWT | 說明 |
+| --- | --- | --- | --- | --- |
+| POST | `/api/events/{eventId}/stalls/select` | `StallSelectionRequest` | 否 | 選擇活動攤位 |
+| GET | `/api/events/{eventId}/stallsStatus` | - | 否 | 取得活動攤位狀態 |
+| GET | `/api/vendor/account` | - | 是 | 取得目前登入攤主資料 |
+| GET | `/api/vendor/stall-map/{applicationNo}` | - | 否 | 取得攤主報名的攤位圖資訊 |
 
-    @Schema(description = "欄位說明", example = "example-value")
-    private String value;
+### 主辦方 API
 
-    public String getValue() {
-        return value;
-    }
+| Method | API | Request | JWT | 說明 |
+| --- | --- | --- | --- | --- |
+| GET | `/api/organizer/account` | Authorization header | 是 | 取得目前登入主辦方資料 |
+| GET | `/api/organizer/applications/search` | Authorization header | 是 | 查詢目前主辦方 published 活動的所有報名資料 |
 
-    public void setValue(String value) {
-        this.value = value;
-    }
-}
-```
+## 10. 主辦方報名列表回傳
 
-Controller：
+`GET /api/organizer/applications/search` 回傳欄位：
 
-```java
-@Operation(summary = "範例 API", description = "說明這支 API 的用途。")
-@PostMapping("/api/example")
-public Map<String, Object> example(@RequestBody ExampleRequest body) {
-    return Map.of("message", "success");
-}
-```
+| 欄位 | 說明 |
+| --- | --- |
+| `applicationId` | 報名 ID |
+| `applicationNo` | 報名編號 |
+| `eventId` | 活動 ID |
+| `eventTitle` | 活動名稱 |
+| `eventTime` | 活動時間文字 |
+| `eventStartDate` | 活動開始日期 |
+| `eventEndDate` | 活動結束日期 |
+| `eventStartTime` | 活動開始時間 |
+| `eventEndTime` | 活動結束時間 |
+| `applyDates` | 報名參加日期，逗號分隔 |
+| `vendorName` | 品牌名稱 / 攤位名稱 |
+| `vendorOwnerName` | 攤主姓名 |
+| `brandType` | 品牌類型 |
+| `appliedAt` | 報名時間 |
+| `applicationStatus` | 前端顯示的報名狀態 |
 
-需要 JWT 的 Controller：
-
-```java
-@Operation(summary = "會員資料", description = "需要在 Authorization header 帶入 Bearer JWT。")
-@SecurityRequirement(name = "bearerAuth")
-@GetMapping("/api/member/profile")
-public Map<String, Object> profile(@RequestHeader("Authorization") String authorizationHeader) {
-    return Map.of("message", "success");
-}
-```
+`applicationStatus` 由 `ApplicationStatusService` 依取消、退款、審核、付款、選位、活動結束與保證金狀態推導。

@@ -1,11 +1,11 @@
-package com.example.demo.swagger;
+package com.example.demo.dto;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 
-@Schema(description = "Google credential 請求資料")
+@Schema(description = "Google credential 請求")
 public class GoogleCredentialRequest {
 
-    @Schema(description = "Google Identity Services 回傳的 credential / ID token", example = "GOOGLE_ID_TOKEN")
+    @Schema(description = "Google Identity Services credential / ID token", example = "GOOGLE_ID_TOKEN")
     private String credential;
 
     public String getCredential() {
