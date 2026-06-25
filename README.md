@@ -136,11 +136,7 @@ spring.datasource.url=jdbc:sqlserver://localhost:1433;databaseName=MarketDayDB;e
 - 調整報名日期設計：
   - 移除以 `event_sessions`、`application_sessions` 表示報名場次的設計。
   - 改由 `application_dates.apply_date` 記錄攤主實際報名參加日期。
-- 調整 `test3.sql` 測試資料：
-  - 建立 20 個攤主、2 個主辦方、10 個活動與至少 50 筆報名資料。
-  - 測試資料涵蓋 `待審核`、`審核未通過`、`待付款`、`待選位`、`報名完成`、`保證金已退還`、`退款申請中`、`退款處理中`、`已退款`、`已取消`。
-  - `MD0105` 固定設為已結束活動，用於測試活動結束後的保證金狀態。
-  - `MD0105` 的報名資料只保留合理的結束後狀態：`報名完成`、`已取消`、`已退款`。
+
 - 後端同步注意：
   - `ApplicationStatusService` 會依取消、退款、審核、付款、選位、活動結束與保證金狀態推導前端顯示的 `applicationStatus`。
   - `保證金已退還` 需同時符合已付款、已選位、活動已結束且 `deposit_status = RETURNED`。
