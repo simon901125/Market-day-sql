@@ -258,19 +258,6 @@ CREATE INDEX IX_market_events_review_status ON dbo.market_events(review_status);
 CREATE INDEX IX_market_events_publish_status ON dbo.market_events(publish_status);
 GO
 
-CREATE TABLE dbo.event_sessions
-(
-    id BIGINT IDENTITY(1,1) NOT NULL,
-    event_id BIGINT NOT NULL,
-    session_date DATE NOT NULL,
-    start_time TIME(0) NOT NULL,
-    end_time TIME(0) NOT NULL,
-    max_booths INT NULL,
-    CONSTRAINT PK_event_sessions PRIMARY KEY (id),
-    CONSTRAINT FK_event_sessions_market_events FOREIGN KEY (event_id) REFERENCES dbo.market_events(id)
-);
-GO
-
 CREATE TABLE dbo.event_images
 (
     id BIGINT IDENTITY(1,1) NOT NULL,
@@ -330,11 +317,13 @@ CREATE TABLE dbo.event_applications
     applicant_note NVARCHAR(MAX) NULL,
     total_amount DECIMAL(10,2) NOT NULL,
     deposit_amount DECIMAL(10,2) NOT NULL CONSTRAINT DF_event_applications_deposit_amount DEFAULT 0,
-    deposit_status NVARCHAR(30) NOT NULL CONSTRAINT DF_event_applications_deposit_status DEFAULT N'NOT_REFUNDED',
+    deposit_status NVARCHAR(30) NOT NULL CONSTRAINT DF_event_applications_deposit_status DEFAULT N'NOT_RETURNED',
     payment_due_at DATETIME2(0) NULL,
-    review_status NVARCHAR(30) NULL,
+    review_status NVARCHAR(30) NOT NULL CONSTRAINT DF_event_applications_review_status DEFAULT N'PENDING',
     review_note NVARCHAR(MAX) NULL,
-    payment_status NVARCHAR(30) NULL,
+    payment_status NVARCHAR(30) NOT NULL CONSTRAINT DF_event_applications_payment_status DEFAULT N'PENDING',
+    is_cancelled BIT NOT NULL CONSTRAINT DF_event_applications_is_cancelled DEFAULT 0,
+    created_at DATETIME2(0) NOT NULL CONSTRAINT DF_event_applications_created_at DEFAULT SYSDATETIME(),
     CONSTRAINT PK_event_applications PRIMARY KEY (id),
     CONSTRAINT UQ_event_applications_application_no UNIQUE (application_no),
     CONSTRAINT UQ_event_applications_event_vendor_profile UNIQUE (event_id, vendor_profile_id),
@@ -342,9 +331,9 @@ CREATE TABLE dbo.event_applications
     CONSTRAINT FK_event_applications_users FOREIGN KEY (user_id) REFERENCES dbo.users(id),
     CONSTRAINT FK_event_applications_vendor_profiles FOREIGN KEY (vendor_profile_id) REFERENCES dbo.vendor_profiles(id),
     CONSTRAINT FK_event_applications_event_stalls FOREIGN KEY (selected_stall_id) REFERENCES dbo.event_stalls(id),
-    CONSTRAINT CK_event_applications_review_status CHECK (review_status IS NULL OR review_status IN (N'PENDING', N'APPROVED', N'REJECTED', N'CANCELLED')),
-    CONSTRAINT CK_event_applications_deposit_status CHECK (deposit_status IN (N'NOT_REFUNDED', N'REFUNDED')),
-    CONSTRAINT CK_event_applications_payment_status CHECK (payment_status IS NULL OR payment_status IN (N'UNPAID', N'PAID', N'FAILED', N'CANCELLED'))
+    CONSTRAINT CK_event_applications_review_status CHECK (review_status IN (N'PENDING', N'APPROVED', N'REJECTED')),
+    CONSTRAINT CK_event_applications_deposit_status CHECK (deposit_status IN (N'NOT_RETURNED', N'RETURNED')),
+    CONSTRAINT CK_event_applications_payment_status CHECK (payment_status IN (N'PENDING', N'PAID', N'FAILED', N'EXPIRED'))
 );
 GO
 
@@ -352,19 +341,22 @@ CREATE INDEX IX_event_applications_event_review ON dbo.event_applications(event_
 CREATE INDEX IX_event_applications_user ON dbo.event_applications(user_id);
 CREATE INDEX IX_event_applications_selected_stall ON dbo.event_applications(selected_stall_id);
 CREATE INDEX IX_event_applications_payment_due ON dbo.event_applications(payment_status, payment_due_at);
+CREATE INDEX IX_event_applications_cancelled ON dbo.event_applications(is_cancelled);
+CREATE INDEX IX_event_applications_created ON dbo.event_applications(created_at);
 GO
 
-CREATE TABLE dbo.application_sessions
+CREATE TABLE dbo.application_dates
 (
     id BIGINT IDENTITY(1,1) NOT NULL,
     application_id BIGINT NOT NULL,
-    session_id BIGINT NOT NULL,
-    created_at DATETIME2(0) NOT NULL CONSTRAINT DF_application_sessions_created_at DEFAULT SYSDATETIME(),
-    CONSTRAINT PK_application_sessions PRIMARY KEY (id),
-    CONSTRAINT UQ_application_sessions_application_session UNIQUE (application_id, session_id),
-    CONSTRAINT FK_application_sessions_event_applications FOREIGN KEY (application_id) REFERENCES dbo.event_applications(id),
-    CONSTRAINT FK_application_sessions_event_sessions FOREIGN KEY (session_id) REFERENCES dbo.event_sessions(id)
+    apply_date DATE NOT NULL,
+    CONSTRAINT PK_application_dates PRIMARY KEY (id),
+    CONSTRAINT UQ_application_dates_application_date UNIQUE (application_id, apply_date),
+    CONSTRAINT FK_application_dates_event_applications FOREIGN KEY (application_id) REFERENCES dbo.event_applications(id)
 );
+GO
+
+CREATE INDEX IX_application_dates_apply_date ON dbo.application_dates(apply_date);
 GO
 
 CREATE TABLE dbo.payments
@@ -381,7 +373,7 @@ CREATE TABLE dbo.payments
     CONSTRAINT PK_payments PRIMARY KEY (id),
     CONSTRAINT UQ_payments_payment_no UNIQUE (payment_no),
     CONSTRAINT FK_payments_event_applications FOREIGN KEY (application_id) REFERENCES dbo.event_applications(id),
-    CONSTRAINT CK_payments_status CHECK (status IN (N'PENDING', N'PAID', N'FAILED'))
+    CONSTRAINT CK_payments_status CHECK (status IN (N'PENDING', N'PAID', N'FAILED', N'EXPIRED'))
 );
 GO
 
@@ -396,19 +388,19 @@ CREATE TABLE dbo.refunds
     application_id BIGINT NOT NULL,
     payment_id BIGINT NULL,
     amount DECIMAL(10,2) NOT NULL,
-    review_status NVARCHAR(30) NOT NULL,
+    refund_status NVARCHAR(30) NOT NULL CONSTRAINT DF_refunds_refund_status DEFAULT N'REFUND_REQUESTED',
     refunded_at DATETIME2(0) NULL,
     CONSTRAINT PK_refunds PRIMARY KEY (id),
     CONSTRAINT UQ_refunds_refund_no UNIQUE (refund_no),
     CONSTRAINT FK_refunds_event_applications FOREIGN KEY (application_id) REFERENCES dbo.event_applications(id),
     CONSTRAINT FK_refunds_payments FOREIGN KEY (payment_id) REFERENCES dbo.payments(id),
-    CONSTRAINT CK_refunds_review_status CHECK (review_status IN (N'PENDING', N'APPROVED', N'REJECTED'))
+    CONSTRAINT CK_refunds_refund_status CHECK (refund_status IN (N'REFUND_REQUESTED', N'REFUNDING', N'REFUND_FAILED', N'REFUNDED'))
 );
 GO
 
 CREATE INDEX IX_refunds_application ON dbo.refunds(application_id);
 CREATE INDEX IX_refunds_payment ON dbo.refunds(payment_id);
-CREATE INDEX IX_refunds_review_status ON dbo.refunds(review_status);
+CREATE INDEX IX_refunds_refund_status ON dbo.refunds(refund_status);
 GO
 
 CREATE TABLE dbo.notifications
@@ -612,13 +604,6 @@ EXEC dbo.usp_add_column_description N'market_events', N'review_status', N'活動
 EXEC dbo.usp_add_column_description N'market_events', N'review_note', N'補件原因 / 審核備註';
 EXEC dbo.usp_add_column_description N'market_events', N'publish_status', N'活動發布狀態（DRAFT/PUBLISHED/UNPUBLISHED/CANCELLED）';
 
-EXEC dbo.usp_add_column_description N'event_sessions', N'id', N'場次 ID';
-EXEC dbo.usp_add_column_description N'event_sessions', N'event_id', N'活動 ID';
-EXEC dbo.usp_add_column_description N'event_sessions', N'session_date', N'場次日期';
-EXEC dbo.usp_add_column_description N'event_sessions', N'start_time', N'開始時間';
-EXEC dbo.usp_add_column_description N'event_sessions', N'end_time', N'結束時間';
-EXEC dbo.usp_add_column_description N'event_sessions', N'max_booths', N'單日攤位上限';
-
 EXEC dbo.usp_add_column_description N'event_images', N'id', N'圖片 ID';
 EXEC dbo.usp_add_column_description N'event_images', N'event_id', N'活動 ID';
 EXEC dbo.usp_add_column_description N'event_images', N'image_url', N'圖片路徑';
@@ -647,16 +632,17 @@ EXEC dbo.usp_add_column_description N'event_applications', N'vehicle_no', N'車�
 EXEC dbo.usp_add_column_description N'event_applications', N'applicant_note', N'攤主備註';
 EXEC dbo.usp_add_column_description N'event_applications', N'total_amount', N'試算總金額';
 EXEC dbo.usp_add_column_description N'event_applications', N'deposit_amount', N'保證金金額';
-EXEC dbo.usp_add_column_description N'event_applications', N'deposit_status', N'保證金狀態（NOT_REFUNDED/REFUNDED）';
+EXEC dbo.usp_add_column_description N'event_applications', N'deposit_status', N'保證金退還狀態（NOT_RETURNED/RETURNED）';
 EXEC dbo.usp_add_column_description N'event_applications', N'payment_due_at', N'付款期限';
-EXEC dbo.usp_add_column_description N'event_applications', N'review_status', N'報名審核狀態（PENDING/APPROVED/REJECTED/CANCELLED）';
+EXEC dbo.usp_add_column_description N'event_applications', N'review_status', N'報名審核狀態（PENDING/APPROVED/REJECTED）';
 EXEC dbo.usp_add_column_description N'event_applications', N'review_note', N'報名審核未通過原因';
-EXEC dbo.usp_add_column_description N'event_applications', N'payment_status', N'報名付款狀態（UNPAID/PAID/FAILED/CANCELLED）';
+EXEC dbo.usp_add_column_description N'event_applications', N'payment_status', N'報名付款狀態（PENDING/PAID/FAILED/EXPIRED）';
+EXEC dbo.usp_add_column_description N'event_applications', N'is_cancelled', N'報名是否取消';
+EXEC dbo.usp_add_column_description N'event_applications', N'created_at', N'報名建立時間';
 
-EXEC dbo.usp_add_column_description N'application_sessions', N'id', N'ID';
-EXEC dbo.usp_add_column_description N'application_sessions', N'application_id', N'報名 ID';
-EXEC dbo.usp_add_column_description N'application_sessions', N'session_id', N'場次 ID';
-EXEC dbo.usp_add_column_description N'application_sessions', N'created_at', N'建立時間';
+EXEC dbo.usp_add_column_description N'application_dates', N'id', N'ID';
+EXEC dbo.usp_add_column_description N'application_dates', N'application_id', N'報名 ID';
+EXEC dbo.usp_add_column_description N'application_dates', N'apply_date', N'報名參加日期';
 
 EXEC dbo.usp_add_column_description N'payments', N'id', N'付款 ID';
 EXEC dbo.usp_add_column_description N'payments', N'payment_no', N'付款編號';
@@ -664,7 +650,7 @@ EXEC dbo.usp_add_column_description N'payments', N'application_id', N'報名 ID'
 EXEC dbo.usp_add_column_description N'payments', N'amount', N'付款金額';
 EXEC dbo.usp_add_column_description N'payments', N'provider', N'金流服務商';
 EXEC dbo.usp_add_column_description N'payments', N'provider_trade_no', N'金流交易編號';
-EXEC dbo.usp_add_column_description N'payments', N'status', N'付款狀態(PENDING/PAID/FAILED)';
+EXEC dbo.usp_add_column_description N'payments', N'status', N'付款狀態（PENDING/PAID/FAILED/EXPIRED）';
 EXEC dbo.usp_add_column_description N'payments', N'paid_at', N'付款成功時間';
 EXEC dbo.usp_add_column_description N'payments', N'created_at', N'建立時間';
 
@@ -673,7 +659,7 @@ EXEC dbo.usp_add_column_description N'refunds', N'refund_no', N'退款編號';
 EXEC dbo.usp_add_column_description N'refunds', N'application_id', N'報名 ID';
 EXEC dbo.usp_add_column_description N'refunds', N'payment_id', N'原付款紀錄';
 EXEC dbo.usp_add_column_description N'refunds', N'amount', N'退款金額';
-EXEC dbo.usp_add_column_description N'refunds', N'review_status', N'退款審核狀態（PENDING/APPROVED/REJECTED）';
+EXEC dbo.usp_add_column_description N'refunds', N'refund_status', N'退款處理狀態（REFUND_REQUESTED/REFUNDING/REFUND_FAILED/REFUNDED）';
 EXEC dbo.usp_add_column_description N'refunds', N'refunded_at', N'實際退款完成時間';
 
 EXEC dbo.usp_add_column_description N'notifications', N'id', N'通知 ID';

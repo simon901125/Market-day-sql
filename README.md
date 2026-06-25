@@ -18,12 +18,11 @@
 - `vendor_images`：品牌圖片，關聯 `vendor_profiles`，圖片類型包含 `AVATAR`、`COVER`、`GALLERY`
 - `vendor_products`：品牌商品，關聯 `vendor_profiles`
 - `market_events`：市集活動，包含發布狀態與活動審核狀態
-- `event_sessions`：活動場次
 - `event_images`：活動圖片
 - `event_stall_zones`：活動攤位分區
 - `event_stalls`：活動攤位，可記錄攤位尺寸、編號與選位狀態
-- `event_applications`：攤主活動報名，包含選擇攤位、保證金與報名審核備註
-- `application_sessions`：報名場次
+- `event_applications`：攤主活動報名，包含選擇攤位、保證金、報名審核備註與報名建立時間
+- `application_dates`：報名參加日期，一筆報名可選擇活動中的多個日期
 - `payments`：付款紀錄
 - `refunds`：退款紀錄，關聯報名與原付款紀錄
 - `notifications`：通知
@@ -111,7 +110,7 @@ spring.datasource.url=jdbc:sqlserver://localhost:1433;databaseName=MarketDayDB;e
 - Swagger schema 是否需要同步更新
 - `test.sql` 是否需要補測試資料
 
-近期 schema 已調整 `users` 的自動登出與更新時間欄位，並將原本 `vendors` 品牌資料拆成 `user_profiles`、`vendor_profiles`、`organizer_profiles`。若後端開始實作這些功能，需同步檢查相關 Entity / DTO / API 文件是否已包含 `expired_time`、`user_profiles`、`vendor_profiles`、`organizer_profiles`、`vendor_profile_id`、`review_status`、`review_note`、`selected_stall_id`、`deposit_amount`、`deposit_status`、`event_stalls` 與 `refunds`。
+近期 schema 已調整 `users` 的自動登出與更新時間欄位，並將品牌/主辦方詳細資料拆成 `user_profiles`、`vendor_profiles`、`organizer_profiles`。若後端開始實作這些功能，需同步檢查相關 Entity / DTO / API 文件是否已包含 `expired_time`、`user_profiles`、`vendor_profiles`、`organizer_profiles`、`vendor_profile_id`、`review_status`、`review_note`、`selected_stall_id`、`deposit_amount`、`deposit_status`、`event_stalls` 與 `refunds`。
 
 若變更 `users` 欄位，請特別檢查：
 
@@ -120,3 +119,29 @@ spring.datasource.url=jdbc:sqlserver://localhost:1433;databaseName=MarketDayDB;e
 - `AuthService.java`
 - `JwtService.java`
 - `demo/src/main/java/com/example/demo/swagger/*Request.java`
+
+## 更新日誌
+
+### 2026-06-25
+
+- 調整 `event_applications` 狀態欄位設計：
+  - `review_status` 保留報名審核流程，允許值為 `PENDING`、`APPROVED`、`REJECTED`。
+  - `payment_status` 改為付款流程狀態，允許值為 `PENDING`、`PAID`、`FAILED`、`EXPIRED`。
+  - `deposit_status` 改為保證金退還狀態，允許值為 `NOT_RETURNED`、`RETURNED`。
+  - 新增 `is_cancelled` 統一記錄報名是否取消，移除以 `review_status` 或 `payment_status` 表示取消的做法。
+  - 新增 `created_at` 記錄報名建立時間。
+- 調整退款狀態：
+  - `refunds.refund_status` 改為 `REFUND_REQUESTED`、`REFUNDING`、`REFUND_FAILED`、`REFUNDED`。
+  - 退款流程由 `refunds` 表管理，不再放在 `event_applications.review_status`。
+- 調整報名日期設計：
+  - 移除以 `event_sessions`、`application_sessions` 表示報名場次的設計。
+  - 改由 `application_dates.apply_date` 記錄攤主實際報名參加日期。
+- 調整 `test3.sql` 測試資料：
+  - 建立 20 個攤主、2 個主辦方、10 個活動與至少 50 筆報名資料。
+  - 測試資料涵蓋 `待審核`、`審核未通過`、`待付款`、`待選位`、`報名完成`、`保證金已退還`、`退款申請中`、`退款處理中`、`已退款`、`已取消`。
+  - `MD0105` 固定設為已結束活動，用於測試活動結束後的保證金狀態。
+  - `MD0105` 的報名資料只保留合理的結束後狀態：`報名完成`、`已取消`、`已退款`。
+- 後端同步注意：
+  - `ApplicationStatusService` 會依取消、退款、審核、付款、選位、活動結束與保證金狀態推導前端顯示的 `applicationStatus`。
+  - `保證金已退還` 需同時符合已付款、已選位、活動已結束且 `deposit_status = RETURNED`。
+  - Repository 若查詢 `event_applications`，取消狀態應以 `is_cancelled` 判斷，不應再檢查 `review_status/payment_status = CANCELLED`。

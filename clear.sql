@@ -19,12 +19,11 @@ BEGIN TRY
     /* Child tables first to satisfy foreign key constraints. */
     DELETE FROM dbo.refunds;
     DELETE FROM dbo.payments;
-    DELETE FROM dbo.application_sessions;
+    DELETE FROM dbo.application_dates;
     DELETE FROM dbo.event_applications;
     DELETE FROM dbo.event_stalls;
     DELETE FROM dbo.event_stall_zones;
     DELETE FROM dbo.event_images;
-    DELETE FROM dbo.event_sessions;
     DELETE FROM dbo.market_events;
     DELETE FROM dbo.vendor_products;
     DELETE FROM dbo.vendor_images;
@@ -40,12 +39,11 @@ BEGIN TRY
     /* Reset identity values so the next inserted row starts at 1. */
     DBCC CHECKIDENT ('dbo.refunds', RESEED, 0) WITH NO_INFOMSGS;
     DBCC CHECKIDENT ('dbo.payments', RESEED, 0) WITH NO_INFOMSGS;
-    DBCC CHECKIDENT ('dbo.application_sessions', RESEED, 0) WITH NO_INFOMSGS;
+    DBCC CHECKIDENT ('dbo.application_dates', RESEED, 0) WITH NO_INFOMSGS;
     DBCC CHECKIDENT ('dbo.event_applications', RESEED, 0) WITH NO_INFOMSGS;
     DBCC CHECKIDENT ('dbo.event_stalls', RESEED, 0) WITH NO_INFOMSGS;
     DBCC CHECKIDENT ('dbo.event_stall_zones', RESEED, 0) WITH NO_INFOMSGS;
     DBCC CHECKIDENT ('dbo.event_images', RESEED, 0) WITH NO_INFOMSGS;
-    DBCC CHECKIDENT ('dbo.event_sessions', RESEED, 0) WITH NO_INFOMSGS;
     DBCC CHECKIDENT ('dbo.market_events', RESEED, 0) WITH NO_INFOMSGS;
     DBCC CHECKIDENT ('dbo.vendor_products', RESEED, 0) WITH NO_INFOMSGS;
     DBCC CHECKIDENT ('dbo.vendor_images', RESEED, 0) WITH NO_INFOMSGS;
