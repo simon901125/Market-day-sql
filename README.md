@@ -311,3 +311,11 @@ http://localhost:8081/swagger-ui/marketDay/index.html
 - 同步主辦方報名列表回傳欄位與 `applicationStatus` 顯示狀態。
 - 同步 DB 狀態設計：`is_cancelled`、`payment_status`、`deposit_status`、`refund_status`、`application_dates.apply_date`。
 - 補充 `GET /api/organizer/applications/search` 目前由 Service 解析 Authorization，但尚未加入 `JwtAuthenticationFilter.protectedApis` 的注意事項。
+
+### 2026-06-26
+
+- 移除攤主選位地圖回傳中的底圖資訊，不再回傳 `mapImageUrl`。
+- 移除專案對 `uploads` 靜態資源路徑的參考，包含 `app.upload-dir`、`app.upload-url-prefix` 與 `UploadResourceConfig`。
+- 將 DB、Google OAuth、Mail 等本機私密設定改為透過環境變數提供。
+- 新增本機啟動方式：執行 `run-local.cmd` 先設定環境變數，再啟動 Spring Boot。
+- 將 `run-local.cmd` 加入 `.gitignore`，避免提交含私密資料的本機啟動腳本。
