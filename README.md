@@ -2,6 +2,24 @@
 
 本資料夾是 Market Day 後端 API 專案，使用 Spring Boot 建立，包含本地/Google 註冊登入、JWT 驗證、使用者資料、攤位選位、主辦方資料與主辦方報名列表查詢。
 
+## 更新日誌
+
+### 2026-06-26
+
+- 移除攤主選位地圖回傳中的底圖資訊，不再回傳 `mapImageUrl`。
+- 移除專案對 `uploads` 靜態資源路徑的參考，包含 `app.upload-dir`、`app.upload-url-prefix` 與 `UploadResourceConfig`。
+- 將 DB、Google OAuth、Mail 等本機私密設定改為透過環境變數提供。
+- 改用 `run-local.cmd` 作為本機啟動入口，先設定環境變數，再啟動 Spring Boot。
+- 將 `run-local.cmd` 加入 `.gitignore`，避免提交含私密資料的本機啟動腳本。
+
+### 2026-06-25
+
+- 移除文件中已不存在的 `MainScreenController`、`MainScreenService`、`MainScreenRepository` 與 `/api/main-screen` API。
+- 新增主辦方 API 文件：`GET /api/organizer/account`、`GET /api/organizer/applications/search`。
+- 同步主辦方報名列表回傳欄位與 `applicationStatus` 顯示狀態。
+- 同步 DB 狀態設計：`is_cancelled`、`payment_status`、`deposit_status`、`refund_status`、`application_dates.apply_date`。
+- 補充 `GET /api/organizer/applications/search` 目前由 Service 解析 Authorization，但尚未加入 `JwtAuthenticationFilter.protectedApis` 的注意事項。
+
 ## 技術
 
 - Java 21
@@ -20,140 +38,72 @@
 demo/
 ├─ pom.xml
 ├─ mvnw / mvnw.cmd
+├─ run-local.cmd
 ├─ api-response.md
 ├─ swagger.md
 ├─ README.md
 ├─ src/main/java/com/example/demo
 │  ├─ DemoApplication.java
 │  ├─ Controller/
-│  │  ├─ GlobalExceptionHandler.java
-│  │  ├─ GlobalResponseAdvice.java
-│  │  ├─ OrganizerController.java
-│  │  ├─ StallController.java
-│  │  └─ UserController.java
 │  ├─ dto/
-│  │  ├─ ApiResponse.java
-│  │  ├─ EmailVerificationRequest.java
-│  │  ├─ GoogleCredentialRequest.java
-│  │  ├─ LocalLoginRequest.java
-│  │  ├─ LocalRegisterRequest.java
-│  │  ├─ ResetPasswordRequest.java
-│  │  ├─ StallSelectionRequest.java
-│  │  └─ UpdateUserProfileRequest.java
 │  ├─ entity/
-│  │  ├─ GoogleTokenInfo.java
-│  │  └─ Users.java
 │  ├─ Filter/
-│  │  └─ JwtAuthenticationFilter.java
 │  ├─ Repository/
-│  │  ├─ OrganizerRepository.java
-│  │  ├─ RepositoryResultMapper.java
-│  │  ├─ StallRepository.java
-│  │  └─ UserRepository.java
 │  ├─ Service/
-│  │  ├─ ApplicationStatusService.java
-│  │  ├─ AuthService.java
-│  │  ├─ BCrypt.java
-│  │  ├─ EmailService.java
-│  │  ├─ JwtService.java
-│  │  ├─ OrganizerService.java
-│  │  ├─ StallService.java
-│  │  ├─ UpdateActiveTimeService.java
-│  │  └─ UserService.java
 │  └─ swagger/
-│     └─ OpenApiConfig.java
 └─ src/main/resources/
-   └─ application.properties
+   ├─ application.properties
+   └─ static/
 ```
 
 ## 資料庫
 
-SQL schema 與測試資料在上一層 `sql/`：
-
-```text
-../sql/MarketDayDB.sql
-../sql/dropDB.sql
-../sql/categories.sql
-../sql/clear.sql
-../sql/test.sql
-../sql/test2.sql
-../sql/test3.sql
-```
-
-建議重建流程：
-
-```text
-1. ../sql/dropDB.sql
-2. ../sql/MarketDayDB.sql
-3. ../sql/categories.sql
-4. 測試資料檔依需求執行
-```
-
-目前 API 使用的報名狀態設計重點：
-
-- `event_applications.review_status`：`PENDING`、`APPROVED`、`REJECTED`
-- `event_applications.payment_status`：`PENDING`、`PAID`、`FAILED`、`EXPIRED`
-- `event_applications.deposit_status`：`NOT_RETURNED`、`RETURNED`
-- `event_applications.is_cancelled`：統一表示報名是否取消
-- `refunds.refund_status`：`REFUND_REQUESTED`、`REFUNDING`、`REFUND_FAILED`、`REFUNDED`
-- `application_dates.apply_date`：記錄一筆報名實際參加哪些日期
+請參考 `sql/README.md` 建立 SQL Server 資料庫後，再執行本 API 專案。
 
 ## 設定
 
-設定檔：
+本機啟動請透過 `run-local.cmd` 設定環境變數，不需要直接修改 `application.properties` 內的私密值。
 
-```text
-src/main/resources/application.properties
-```
+`application.properties` 會讀取下列環境變數：
+
+| 變數 | 用途 |
+| --- | --- |
+| `DB_USERNAME` | SQL Server 帳號 |
+| `DB_PASSWORD` | SQL Server 密碼 |
+| `GOOGLE_CLIENT_ID` | Google OAuth Client ID |
+| `MAIL_USERNAME` | Gmail 寄信帳號 |
+| `MAIL_PASSWORD` | Gmail App Password |
 
 範例：
 
-```properties
-spring.datasource.url=jdbc:sqlserver://localhost:1433;databaseName=MarketDayDB;encrypt=true;trustServerCertificate=true
-spring.datasource.username=sa
-spring.datasource.password=<YOUR_SQL_SERVER_PASSWORD>
-spring.datasource.driver-class-name=com.microsoft.sqlserver.jdbc.SQLServerDriver
-
-google.client-id=<YOUR_GOOGLE_OAUTH_WEB_CLIENT_ID>
-
-jwt.secret=<YOUR_LONG_RANDOM_JWT_SECRET>
-jwt.expiration-ms=3600000
-
-spring.mail.host=smtp.gmail.com
-spring.mail.port=587
-spring.mail.username=<YOUR_GMAIL_ADDRESS>
-spring.mail.password=<YOUR_GMAIL_APP_PASSWORD>
-spring.mail.properties.mail.smtp.auth=true
-spring.mail.properties.mail.smtp.starttls.enable=true
-
-server.port=8081
-springdoc.swagger-ui.path=/swagger-ui/marketDay/index.html
+```cmd
+set DB_USERNAME=sa
+set DB_PASSWORD=你的SQLServer密碼
+set GOOGLE_CLIENT_ID=你的GoogleClientId
+set MAIL_USERNAME=你的Gmail帳號
+set MAIL_PASSWORD=你的GmailAppPassword
 ```
+
+`run-local.cmd` 已加入 `.gitignore`，可在本機填入自己的私密資料，不要提交。
 
 ## 執行
 
-在 `demo/` 執行：
+在 terminal 進入 `demo/` 後直接執行：
 
-```powershell
-.\mvnw.cmd spring-boot:run
-```
-
-編譯：
-
-```powershell
-.\mvnw.cmd clean compile
-```
-
-測試：
-
-```powershell
-.\mvnw.cmd test
+```cmd
+run-local.cmd
 ```
 
 API base URL：
 
 ```text
 http://localhost:8081
+```
+
+編譯：
+
+```powershell
+.\mvnw.cmd clean compile
 ```
 
 ## Swagger
@@ -259,7 +209,7 @@ GET  /api/organizer/account
 | POST | `/api/events/{eventId}/stalls/select` | `StallSelectionRequest` | 否 | 選擇活動攤位 |
 | GET | `/api/events/{eventId}/stallsStatus` | - | 否 | 取得活動攤位狀態 |
 | GET | `/api/vendor/account` | - | 是 | 取得目前登入攤主資料 |
-| GET | `/api/vendor/stall-map/{applicationNo}` | - | 否 | 取得攤主報名的攤位圖資訊 |
+| GET | `/api/vendor/stall-map/{applicationNo}` | - | 否 | 取得攤主報名與選位資訊 |
 
 ### 主辦方 API
 
@@ -289,33 +239,11 @@ GET  /api/organizer/account
 
 保證金狀態只有在已付款、已選位、活動已結束且 `deposit_status = RETURNED` 時，才會顯示 `保證金已退還`。
 
-## 測試頁面
+## Google 端登入 / 註冊輔助測試頁面
 
 ```text
 http://localhost:8081/test.html
 http://localhost:8081/test_2.html
 ```
 
-除 Google credential 相關流程外，建議優先使用 Swagger UI 測試：
-
-```text
-http://localhost:8081/swagger-ui/marketDay/index.html
-```
-
-## 更新日誌
-
-### 2026-06-25
-
-- 移除文件中已不存在的 `MainScreenController`、`MainScreenService`、`MainScreenRepository` 與 `/api/main-screen` API。
-- 新增主辦方 API 文件：`GET /api/organizer/account`、`GET /api/organizer/applications/search`。
-- 同步主辦方報名列表回傳欄位與 `applicationStatus` 顯示狀態。
-- 同步 DB 狀態設計：`is_cancelled`、`payment_status`、`deposit_status`、`refund_status`、`application_dates.apply_date`。
-- 補充 `GET /api/organizer/applications/search` 目前由 Service 解析 Authorization，但尚未加入 `JwtAuthenticationFilter.protectedApis` 的注意事項。
-
-### 2026-06-26
-
-- 移除攤主選位地圖回傳中的底圖資訊，不再回傳 `mapImageUrl`。
-- 移除專案對 `uploads` 靜態資源路徑的參考，包含 `app.upload-dir`、`app.upload-url-prefix` 與 `UploadResourceConfig`。
-- 將 DB、Google OAuth、Mail 等本機私密設定改為透過環境變數提供。
-- 新增本機啟動方式：執行 `run-local.cmd` 先設定環境變數，再啟動 Spring Boot。
-- 將 `run-local.cmd` 加入 `.gitignore`，避免提交含私密資料的本機啟動腳本。
+這兩個頁面主要用來輔助測試 Google credential 取得、Google 註冊 / 登入，以及登入後 JWT 呼叫流程。其他 API 建議優先使用 Swagger UI 測試。
