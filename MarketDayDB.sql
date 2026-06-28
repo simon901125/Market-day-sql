@@ -681,3 +681,32 @@ GO
 
 DROP PROCEDURE dbo.usp_add_table_description;
 GO
+
+IF NOT EXISTS (
+    SELECT 1
+    FROM dbo.users
+    WHERE email = 'admin@marketday.local'
+)
+BEGIN
+    INSERT INTO dbo.users (
+        role,
+        name,
+        email,
+        password_hash,
+        provider,
+        status,
+        isLogin,
+        email_verified_at
+    )
+    VALUES (
+        'ADMIN',
+        'Admin',
+        'admin@marketday.local',
+        '$2a$10$jZ5SinwJD56C7PQX8Kj2wORspIPscc5H9Nf9nE1RcKj1j7/.o4QqW',
+        'LOCAL',
+        'ACTIVE',
+        0,
+        SYSDATETIME()
+    );
+END
+GO
