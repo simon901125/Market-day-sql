@@ -1,6 +1,8 @@
 package com.example.demo.Service;
 
 import java.nio.charset.StandardCharsets;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.Date;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
@@ -27,9 +29,9 @@ public class JwtService {
     private final ConcurrentMap<String, Date> revokedTokens = new ConcurrentHashMap<>();
 
     //產生token，包含使用者的 email 和 role，並設定過期時間
-    public String generateToken(String email, String role) {
+    public String generateToken(String email, String role, LocalDateTime expiresAt) {
         Date now = new Date();
-        Date expiration = new Date(now.getTime() + expirationMs);
+        Date expiration = Date.from(expiresAt.atZone(ZoneId.systemDefault()).toInstant());
 
         return Jwts.builder()
                 .subject(email)
@@ -38,6 +40,10 @@ public class JwtService {
                 .expiration(expiration)
                 .signWith(getSigningKey())
                 .compact();
+    }
+
+    public LocalDateTime calculateExpiration() {
+        return LocalDateTime.now().plusNanos(expirationMs * 1_000_000);
     }
     //驗證 token 是否有效，檢查簽名和過期時間
     public boolean isTokenValid(String token) {
@@ -65,6 +71,12 @@ public class JwtService {
 
     public String getRole(String token) {
         return parseClaims(token).get("role", String.class);
+    }
+
+    public LocalDateTime getExpiration(String token) {
+        return LocalDateTime.ofInstant(
+                parseClaims(token).getExpiration().toInstant(),
+                ZoneId.systemDefault());
     }
 
     public String extractTokenFromAuthorizationHeader(String authorizationHeader) {

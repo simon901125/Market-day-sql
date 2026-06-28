@@ -1,8 +1,12 @@
 package com.example.demo.Service;
 
+import java.nio.charset.StandardCharsets;
 import java.security.SecureRandom;
+import java.security.MessageDigest;
 import java.sql.Timestamp;
 import java.time.LocalDateTime;
+import java.util.Base64;
+import java.util.HexFormat;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -21,6 +25,7 @@ import com.example.demo.dto.EmailVerificationRequest;
 import com.example.demo.dto.GoogleCredentialRequest;
 import com.example.demo.dto.LocalLoginRequest;
 import com.example.demo.dto.LocalRegisterRequest;
+import com.example.demo.dto.RequestPasswordResetRequest;
 import com.example.demo.dto.ResetPasswordRequest;
 import com.example.demo.dto.UpdateUserProfileRequest;
 
@@ -43,13 +48,14 @@ public class UserService {
     private String googleClientId;
 
     private static final SecureRandom SECURE_RANDOM = new SecureRandom();
-    public static final int AUTO_LOGOUT_TIMEOUT_HOURS = 1;
-
     public List<Users> findAllUsers() {
         return userRepository.findAllUsers();
     }
 
     public String registerLocal(LocalRegisterRequest user, String role) {
+        if (isAdminRole(role)) {
+            return "Admin accounts must be created by the system";
+        }
         if (userRepository.existsByEmail(user.getEmail())) {
             return "Email already registered";
         }
@@ -58,8 +64,7 @@ public class UserService {
                 role,
                 user.getName(),
                 user.getEmail(),
-                authService.hashPassword(user.getPassword()),
-                user.getPhone());
+                authService.hashPassword(user.getPassword()));
 
         String verificationCode = generateVerificationCode();
         userRepository.deleteEmailVerificationTokensByUserId(userId);
@@ -69,6 +74,9 @@ public class UserService {
     }
 
     public String registerGoogle(GoogleCredentialRequest body, String role) {
+        if (isAdminRole(role)) {
+            return "Admin accounts do not support Google registration";
+        }
         String credential = body.getCredential();
         if (credential == null || credential.isBlank()) {
             return "Google credential is required";
@@ -118,16 +126,25 @@ public class UserService {
             return Map.of("message", "This account cannot login from this portal");
         }
 
-        if (userRepository.markLoginById(toLong(userData.get().get("id")), AUTO_LOGOUT_TIMEOUT_HOURS) == 0) {
+        LocalDateTime sessionExpiresAt = userRepository.startLoginSession(
+                toLong(userData.get().get("id")),
+                jwtService.calculateExpiration());
+        if (sessionExpiresAt == null) {
             return Map.of("message", "Login status update failed");
         }
         userData.get().put("isLogin", true);
 
-        return buildLoginResponse(userData.get(), "Login successful");
+        return buildLoginResponse(
+                userData.get(),
+                "Login successful",
+                sessionExpiresAt);
     }
 
     @Transactional
     public Map<String, Object> loginGoogle(GoogleCredentialRequest body, String expectedRole) {
+        if (isAdminRole(expectedRole)) {
+            return Map.of("message", "Admin accounts do not support Google login");
+        }
         String credential = body.getCredential();
         if (credential == null || credential.isBlank()) {
             return Map.of("message", "Google credential is required");
@@ -159,12 +176,18 @@ public class UserService {
             return Map.of("message", "This account cannot login from this portal");
         }
 
-        if (userRepository.markLoginById(toLong(userData.get().get("id")), AUTO_LOGOUT_TIMEOUT_HOURS) == 0) {
+        LocalDateTime sessionExpiresAt = userRepository.startLoginSession(
+                toLong(userData.get().get("id")),
+                jwtService.calculateExpiration());
+        if (sessionExpiresAt == null) {
             return Map.of("message", "Login status update failed");
         }
         userData.get().put("isLogin", true);
 
-        return buildLoginResponse(userData.get(), "Google login successful");
+        return buildLoginResponse(
+                userData.get(),
+                "Google login successful",
+                sessionExpiresAt);
     }
 
     public Map<String, Object> logout(String authorizationHeader) {
@@ -286,6 +309,28 @@ public class UserService {
         return Map.of("message", "Email verified successfully");
     }
 
+    public Map<String, Object> requestPasswordReset(RequestPasswordResetRequest body) {
+        Optional<Map<String, Object>> userData = userRepository.findLocalUserByEmail(body.getEmail());
+        if (userData.isPresent()) {
+            Long userId = ((Number) userData.get().get("id")).longValue();
+            String verificationCode = generateVerificationCode();
+            userRepository.deleteUserTokensByUserId(
+                    userId,
+                    UserRepository.TOKEN_TYPE_PASSWORD_RESET);
+            userRepository.createUserToken(
+                    userId,
+                    verificationCode,
+                    UserRepository.TOKEN_TYPE_PASSWORD_RESET,
+                    LocalDateTime.now().plusMinutes(10));
+            emailService.sendPasswordResetCode(body.getEmail(), verificationCode);
+        }
+
+        return Map.of(
+                "message",
+                "If the email belongs to a local account, a verification code has been sent");
+    }
+
+    @Transactional
     public Map<String, Object> verifyResetPasswordEmail(EmailVerificationRequest body) {
         Map<String, Object> validationError = validateVerificationRequest(body);
         if (validationError != null) {
@@ -299,22 +344,64 @@ public class UserService {
             return Map.of("message", "Invalid or expired verification code");
         }
 
-        return Map.of("message", "Password reset email verified successfully");
+        Map<String, Object> verificationToken = tokenData.get();
+        Long userId = ((Number) verificationToken.get("user_id")).longValue();
+        Long tokenId = ((Number) verificationToken.get("id")).longValue();
+        String resetToken = generateResetToken();
+
+        int consumedTokens = userRepository.deleteUserToken(
+                tokenId,
+                UserRepository.TOKEN_TYPE_PASSWORD_RESET);
+        if (consumedTokens == 0) {
+            return Map.of("message", "Invalid or expired verification code");
+        }
+        userRepository.createUserToken(
+                userId,
+                hashResetToken(resetToken),
+                UserRepository.TOKEN_TYPE_PASSWORD_RESET,
+                LocalDateTime.now().plusMinutes(10));
+
+        return Map.of(
+                "message", "Password reset email verified successfully",
+                "resetToken", resetToken);
     }
 
+    @Transactional
     public Map<String, Object> resetPassword(ResetPasswordRequest body) {
-        if (body.getEmail() == null || body.getEmail().isBlank()) {
-            return Map.of("message", "Email is required");
+        if (body.getResetToken() == null || body.getResetToken().isBlank()) {
+            return Map.of("message", "Reset token is required");
         }
         if (body.getPassword() == null || body.getPassword().isBlank()) {
             return Map.of("message", "Password is required");
         }
 
-        int updatedRows = userRepository.updateLocalPasswordByEmail(
-                body.getEmail(),
+        Optional<Map<String, Object>> tokenData = userRepository.findUserToken(
+                hashResetToken(body.getResetToken()),
+                UserRepository.TOKEN_TYPE_PASSWORD_RESET);
+        if (tokenData.isEmpty()) {
+            return Map.of("message", "Invalid or expired reset token");
+        }
+
+        Map<String, Object> resetToken = tokenData.get();
+        LocalDateTime expiresAt = toLocalDateTime(resetToken.get("expires_at"));
+        if (expiresAt == null || expiresAt.isBefore(LocalDateTime.now())) {
+            return Map.of("message", "Invalid or expired reset token");
+        }
+
+        Long userId = ((Number) resetToken.get("user_id")).longValue();
+        Long tokenId = ((Number) resetToken.get("id")).longValue();
+        int consumedTokens = userRepository.deleteUserToken(
+                tokenId,
+                UserRepository.TOKEN_TYPE_PASSWORD_RESET);
+        if (consumedTokens == 0) {
+            return Map.of("message", "Invalid or expired reset token");
+        }
+
+        int updatedRows = userRepository.updateLocalPasswordByUserId(
+                userId,
                 authService.hashPassword(body.getPassword()));
         if (updatedRows == 0) {
-            return Map.of("message", "Email is not registered as local account");
+            return Map.of("message", "Password reset failed");
         }
 
         return Map.of("message", "Password reset successfully");
@@ -322,6 +409,22 @@ public class UserService {
 
     private String generateVerificationCode() {
         return String.format("%06d", SECURE_RANDOM.nextInt(1_000_000));
+    }
+
+    private String generateResetToken() {
+        byte[] tokenBytes = new byte[32];
+        SECURE_RANDOM.nextBytes(tokenBytes);
+        return Base64.getUrlEncoder().withoutPadding().encodeToString(tokenBytes);
+    }
+
+    private String hashResetToken(String resetToken) {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            return HexFormat.of().formatHex(
+                    digest.digest(resetToken.getBytes(StandardCharsets.UTF_8)));
+        } catch (java.security.NoSuchAlgorithmException e) {
+            throw new IllegalStateException("SHA-256 is not available", e);
+        }
     }
 
     private Map<String, Object> validateVerificationRequest(EmailVerificationRequest body) {
@@ -365,10 +468,16 @@ public class UserService {
         return null;
     }
 
-    private Map<String, Object> buildLoginResponse(Map<String, Object> userData, String message) {
+    private Map<String, Object> buildLoginResponse(
+            Map<String, Object> userData,
+            String message,
+            LocalDateTime sessionExpiresAt) {
         String userEmail = userData.get("email").toString();
         String role = userData.get("role").toString();
-        String token = jwtService.generateToken(userEmail, role);
+        String token = jwtService.generateToken(
+                userEmail,
+                role,
+                sessionExpiresAt);
 
         Map<String, Object> user = new HashMap<>();
         user.put("email", userEmail);
@@ -386,6 +495,10 @@ public class UserService {
 
     private Long toLong(Object value) {
         return ((Number) value).longValue();
+    }
+
+    private boolean isAdminRole(String role) {
+        return "ADMIN".equals(role);
     }
 
     private LocalDateTime toLocalDateTime(Object value) {

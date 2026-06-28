@@ -57,21 +57,55 @@ public class UserRepository {
         return count != null && count > 0;
     }
 
-    public Long createLocalUser(String role, String name, String email, String passwordHash, String phone) {
+    public Long createLocalUser(String role, String name, String email, String passwordHash) {
         String sql = """
-                INSERT INTO users (role, name, email, password_hash, phone, provider)
-                VALUES (:role, :name, :email, :passwordHash, :phone, :provider)
+                INSERT INTO users (role, name, email, password_hash, provider)
+                VALUES (:role, :name, :email, :passwordHash, :provider)
                 """;
         MapSqlParameterSource params = new MapSqlParameterSource()
                 .addValue("role", role)
                 .addValue("name", name)
                 .addValue("email", email)
                 .addValue("passwordHash", passwordHash)
-                .addValue("phone", phone)
                 .addValue("provider", "LOCAL");
         KeyHolder keyHolder = new GeneratedKeyHolder();
         namedParameterJdbcTemplate.update(sql, params, keyHolder, new String[] {"id"});
         return keyHolder.getKey().longValue();
+    }
+
+    public Long createSystemAdmin(String name, String email, String passwordHash) {
+        String sql = """
+                INSERT INTO users (role, name, email, password_hash, provider, status, isLogin, email_verified_at)
+                VALUES (:role, :name, :email, :passwordHash, :provider, :status, :isLogin, SYSDATETIME())
+                """;
+        MapSqlParameterSource params = new MapSqlParameterSource()
+                .addValue("role", "ADMIN")
+                .addValue("name", name)
+                .addValue("email", email)
+                .addValue("passwordHash", passwordHash)
+                .addValue("provider", "LOCAL")
+                .addValue("status", "ACTIVE")
+                .addValue("isLogin", false);
+        KeyHolder keyHolder = new GeneratedKeyHolder();
+        namedParameterJdbcTemplate.update(sql, params, keyHolder, new String[] {"id"});
+        return keyHolder.getKey().longValue();
+    }
+
+    public int updateSystemAdminName(String email, String name) {
+        String sql = """
+                UPDATE users
+                SET name = :name,
+                    updated_at = SYSDATETIME()
+                WHERE email = :email
+                  AND role = :role
+                  AND provider = :provider
+                """;
+        Map<String, Object> map = new HashMap<>();
+        map.put("email", email);
+        map.put("name", name);
+        map.put("role", "ADMIN");
+        map.put("provider", "LOCAL");
+        return namedParameterJdbcTemplate.update(sql, map);
     }
 
     public Long createGoogleUser(String role, String name, String email) {
@@ -181,17 +215,27 @@ public class UserRepository {
         return namedParameterJdbcTemplate.update(sql, map);
     }
 
-    public int markLoginById(Long userId, int timeoutHours) {
+    public LocalDateTime startLoginSession(Long userId, LocalDateTime requestedExpiry) {
         String sql = """
+                DECLARE @updated TABLE (expired_time DATETIME2);
+
                 UPDATE users
                 SET isLogin = 1,
-                    expired_time = DATEADD(HOUR, :timeoutHours, SYSDATETIME())
+                    expired_time = CASE
+                        WHEN expired_time >= :requestedExpiry
+                            THEN DATEADD(SECOND, 1, expired_time)
+                        ELSE :requestedExpiry
+                    END
+                OUTPUT inserted.expired_time INTO @updated
                 WHERE id = :userId
+
+                SELECT TOP 1 expired_time
+                FROM @updated
                 """;
         Map<String, Object> map = new HashMap<>();
         map.put("userId", userId);
-        map.put("timeoutHours", timeoutHours);
-        return namedParameterJdbcTemplate.update(sql, map);
+        map.put("requestedExpiry", requestedExpiry.withNano(0));
+        return namedParameterJdbcTemplate.queryForObject(sql, map, LocalDateTime.class);
     }
 
     public int markLogoutByEmail(String email) {
@@ -215,34 +259,40 @@ public class UserRepository {
         return namedParameterJdbcTemplate.update(sql, Map.of());
     }
 
-    public int updateExpiredTimeByEmail(String email, int timeoutHours) {
-        String sql = """
-                UPDATE users
-                SET expired_time = DATEADD(HOUR, :timeoutHours, SYSDATETIME())
-                WHERE email = :email
-                  AND status = 'ACTIVE'
-                  AND isLogin = 1
-                  AND expired_time > SYSDATETIME()
-                """;
-        Map<String, Object> map = new HashMap<>();
-        map.put("email", email);
-        map.put("timeoutHours", timeoutHours);
-        return namedParameterJdbcTemplate.update(sql, map);
-    }
-
-    public int updateLocalPasswordByEmail(String email, String passwordHash) {
+    public int updateLocalPasswordByUserId(Long userId, String passwordHash) {
         String sql = """
                 UPDATE users
                 SET password_hash = :passwordHash,
                     updated_at = SYSDATETIME()
-                WHERE email = :email
+                WHERE id = :userId
                   AND provider = :provider
                 """;
         Map<String, Object> map = new HashMap<>();
-        map.put("email", email);
+        map.put("userId", userId);
         map.put("passwordHash", passwordHash);
         map.put("provider", "LOCAL");
         return namedParameterJdbcTemplate.update(sql, map);
+    }
+
+    public boolean isCurrentLoginSession(
+            String email,
+            String role,
+            LocalDateTime expiresAt) {
+        String sql = """
+                SELECT COUNT(*)
+                FROM users
+                WHERE email = :email
+                  AND role = :role
+                  AND isLogin = 1
+                  AND expired_time = :expiresAt
+                  AND expired_time > SYSDATETIME()
+                """;
+        Map<String, Object> map = new HashMap<>();
+        map.put("email", email);
+        map.put("role", role);
+        map.put("expiresAt", expiresAt.withNano(0));
+        Integer count = namedParameterJdbcTemplate.queryForObject(sql, map, Integer.class);
+        return count != null && count > 0;
     }
 
     public void createEmailVerificationToken(Long userId, String token, LocalDateTime expiresAt) {
@@ -295,6 +345,22 @@ public class UserRepository {
         Map<String, Object> map = new HashMap<>();
         map.put("email", email);
         map.put("code", code);
+        map.put("tokenType", tokenType);
+        List<Map<String, Object>> list = namedParameterJdbcTemplate.queryForList(sql, map);
+        return RepositoryResultMapper.normalizeOptional(list.stream().findFirst());
+    }
+
+    public Optional<Map<String, Object>> findUserToken(String token, String tokenType) {
+        String sql = """
+                SELECT user_tokens.id, user_tokens.user_id, user_tokens.token, user_tokens.token_type,
+                       user_tokens.expires_at, users.email, users.provider, users.status
+                FROM user_tokens
+                    INNER JOIN users ON users.id = user_tokens.user_id
+                WHERE user_tokens.token = :token
+                  AND user_tokens.token_type = :tokenType
+                """;
+        Map<String, Object> map = new HashMap<>();
+        map.put("token", token);
         map.put("tokenType", tokenType);
         List<Map<String, Object>> list = namedParameterJdbcTemplate.queryForList(sql, map);
         return RepositoryResultMapper.normalizeOptional(list.stream().findFirst());
