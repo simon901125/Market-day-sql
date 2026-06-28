@@ -111,4 +111,133 @@ public class OrganizerRepository {
 
         return RepositoryResultMapper.normalizeList(namedParameterJdbcTemplate.queryForList(sql, map));
     }
+
+    public Optional<Map<String, Object>> findOrganizerApplicationDetail(Long organizerUserId, Long applicationId) {
+        String sql = """
+                SELECT
+                    a.id AS applicationId,
+                    a.application_no AS applicationNo,
+                    a.event_id AS eventId,
+                    e.title AS eventTitle,
+                    e.summary AS eventSummary,
+                    e.description AS eventDescription,
+                    e.location_name AS locationName,
+                    e.city AS eventCity,
+                    e.district AS eventDistrict,
+                    e.address AS eventAddress,
+                    e.start_date AS eventStartDate,
+                    e.end_date AS eventEndDate,
+                    e.start_time AS eventStartTime,
+                    e.end_time AS eventEndTime,
+                    e.base_fee AS baseFee,
+                    e.cover_image_url AS eventCoverImageUrl,
+                    vendor_user.id AS vendorUserId,
+                    vendor_user.email AS vendorEmail,
+                    vendor_up.id AS vendorUserProfileId,
+                    vendor_up.name AS vendorName,
+                    vendor_up.contact_name AS vendorOwnerName,
+                    vendor_up.contact_phone AS vendorPhone,
+                    vendor_up.contact_email AS vendorContactEmail,
+                    vendor_up.city AS vendorCity,
+                    vendor_up.district AS vendorDistrict,
+                    vendor_up.address AS vendorAddress,
+                    vp.id AS vendorProfileId,
+                    vp.brand_type AS brandType,
+                    vp.brand_description AS brandDescription,
+                    vp.product_summary AS productSummary,
+                    vp.instagram_url AS instagramUrl,
+                    vp.facebook_url AS facebookUrl,
+                    vp.website_url AS websiteUrl,
+                    c.name AS categoryName,
+                    vendor_avatar.image_url AS vendorAvatarUrl,
+                    a.selected_stall_id AS selectedStallId,
+                    selected_stall.stall_no AS selectedStallNo,
+                    selected_stall.width AS stallWidth,
+                    selected_stall.length AS stallLength,
+                    selected_stall.height AS stallHeight,
+                    selected_zone.zone_name AS stallZoneName,
+                    a.vehicle_no AS vehicleNo,
+                    a.applicant_note AS applicantNote,
+                    a.total_amount AS totalAmount,
+                    a.deposit_amount AS depositAmount,
+                    a.deposit_status AS depositStatus,
+                    a.payment_due_at AS paymentDueAt,
+                    a.review_status AS reviewStatus,
+                    a.review_note AS reviewNote,
+                    a.payment_status AS paymentStatus,
+                    a.is_cancelled AS isCancelled,
+                    a.created_at AS appliedAt,
+                    application_dates.applyDates,
+                    latest_payment.paymentNo,
+                    latest_payment.paymentAmount,
+                    latest_payment.paymentProvider,
+                    latest_payment.paymentProviderTradeNo,
+                    latest_payment.paymentRecordStatus,
+                    latest_payment.paidAt,
+                    latest_payment.paymentCreatedAt,
+                    latest_refund.refundNo,
+                    latest_refund.refundAmount,
+                    latest_refund.refundStatus,
+                    latest_refund.refundedAt
+                FROM dbo.event_applications a
+                INNER JOIN dbo.market_events e ON e.id = a.event_id
+                INNER JOIN dbo.users vendor_user ON vendor_user.id = a.user_id
+                INNER JOIN dbo.vendor_profiles vp ON vp.id = a.vendor_profile_id
+                INNER JOIN dbo.user_profiles vendor_up ON vendor_up.id = vp.user_profile_id
+                INNER JOIN dbo.categories c ON c.id = vp.category_id
+                LEFT JOIN dbo.event_stalls selected_stall ON selected_stall.id = a.selected_stall_id
+                LEFT JOIN dbo.event_stall_zones selected_zone ON selected_zone.id = selected_stall.zone_id
+                OUTER APPLY (
+                    SELECT TOP 1 vi.image_url
+                    FROM dbo.vendor_images vi
+                    WHERE vi.vendor_profile_id = vp.id
+                      AND vi.image_type = N'AVATAR'
+                    ORDER BY vi.id DESC
+                ) vendor_avatar
+                OUTER APPLY (
+                    SELECT STRING_AGG(CONVERT(varchar(10), ad.apply_date, 23), ',') WITHIN GROUP (ORDER BY ad.apply_date) AS applyDates
+                    FROM dbo.application_dates ad
+                    WHERE ad.application_id = a.id
+                ) application_dates
+                OUTER APPLY (
+                    SELECT TOP 1
+                        p.payment_no AS paymentNo,
+                        p.amount AS paymentAmount,
+                        p.provider AS paymentProvider,
+                        p.provider_trade_no AS paymentProviderTradeNo,
+                        p.status AS paymentRecordStatus,
+                        p.paid_at AS paidAt,
+                        p.created_at AS paymentCreatedAt
+                    FROM dbo.payments p
+                    WHERE p.application_id = a.id
+                    ORDER BY p.created_at DESC, p.id DESC
+                ) latest_payment
+                OUTER APPLY (
+                    SELECT TOP 1
+                        r.refund_no AS refundNo,
+                        r.amount AS refundAmount,
+                        r.refund_status AS refundStatus,
+                        r.refunded_at AS refundedAt
+                    FROM dbo.refunds r
+                    WHERE r.application_id = a.id
+                    ORDER BY
+                        CASE r.refund_status
+                            WHEN N'REFUNDED' THEN 1
+                            WHEN N'REFUNDING' THEN 2
+                            WHEN N'REFUND_REQUESTED' THEN 3
+                            WHEN N'REFUND_FAILED' THEN 4
+                            ELSE 5
+                        END,
+                        r.id DESC
+                ) latest_refund
+                WHERE a.id = :applicationId
+                  AND e.user_id = :organizerUserId
+                """;
+
+        Map<String, Object> map = new HashMap<>();
+        map.put("organizerUserId", organizerUserId);
+        map.put("applicationId", applicationId);
+
+        return RepositoryResultMapper.normalizeOptional(namedParameterJdbcTemplate.queryForList(sql, map).stream().findFirst());
+    }
 }

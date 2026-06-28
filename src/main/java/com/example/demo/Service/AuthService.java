@@ -3,7 +3,7 @@ package com.example.demo.Service;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
 
-import com.example.demo.entity.GoogleTokenInfo;
+import com.example.demo.dto.response.GoogleTokenInfo;
 
 @Service
 public class AuthService {

@@ -1,4 +1,4 @@
-package com.example.demo.dto;
+package com.example.demo.dto.request;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.Email;
@@ -29,8 +29,7 @@ public class LocalRegisterRequest {
     @Schema(description = "密碼，至少 8 個字元，且需包含英文與數字", example = "Password123")
     private String password;
 
-    @NotBlank(message = "Phone is required")
-    @Pattern(regexp = "^09\\d{8}$", message = "Phone must be 10 digits and start with 09")
+    @Pattern(regexp = "^$|^09\\d{8}$", message = "Phone must be 10 digits and start with 09")
     @Schema(description = "台灣手機號碼，10 位數字且以 09 開頭", example = "0912345678")
     private String phone;
 

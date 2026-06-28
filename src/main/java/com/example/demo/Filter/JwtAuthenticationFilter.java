@@ -33,7 +33,11 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             new ProtectedApi(HttpMethod.POST.name(), "/api/users/me"),
             new ProtectedApi(HttpMethod.POST.name(), "/api/account/deactivate"),
             new ProtectedApi(HttpMethod.GET.name(), "/api/vendor/account"),
-            new ProtectedApi(HttpMethod.GET.name(), "/api/organizer/account"));
+            new ProtectedApi(HttpMethod.GET.name(), "/api/vendor/stall-map/{applicationNo}"),
+            new ProtectedApi(HttpMethod.POST.name(), "/api/events/{eventId}/stalls/select"),
+            new ProtectedApi(HttpMethod.GET.name(), "/api/organizer/account"),
+            new ProtectedApi(HttpMethod.GET.name(), "/api/organizer/applications/search"),
+            new ProtectedApi(HttpMethod.GET.name(), "/api/organizer/applications/{id}"));
 
     public JwtAuthenticationFilter(
             JwtService jwtService,
@@ -67,7 +71,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             return;
         }
 
-        if (!updateActiveTimeService.refreshActiveTimeByToken(token)) {
+        if (!updateActiveTimeService.isCurrentLoginSession(token)) {
             writeUnauthorizedResponse(response, "Session expired");
             return;
         }
@@ -78,7 +82,19 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     private boolean isProtectedApi(HttpServletRequest request) {
         String method = request.getMethod();
         String path = request.getRequestURI();
-        return protectedApis.contains(new ProtectedApi(method, path));
+        return protectedApis.stream()
+                .anyMatch(api -> api.method().equals(method) && matchesPath(api.path(), path));
+    }
+
+    private boolean matchesPath(String pattern, String path) {
+        if (pattern.equals(path)) {
+            return true;
+        }
+        if (!pattern.contains("{")) {
+            return false;
+        }
+        String regex = "^" + pattern.replaceAll("\\{[^/]+\\}", "[^/]+") + "$";
+        return path.matches(regex);
     }
     //編寫錯誤回報
     private void writeUnauthorizedResponse(HttpServletResponse response, String message) throws IOException {

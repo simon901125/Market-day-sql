@@ -14,8 +14,12 @@ public class UpdateActiveTimeService {
     @Autowired
     private JwtService jwtService;
 
-    public boolean refreshActiveTimeByToken(String token) {
+    public boolean isCurrentLoginSession(String token) {
         String email = jwtService.getEmail(token);
-        return userRepository.updateExpiredTimeByEmail(email, UserService.AUTO_LOGOUT_TIMEOUT_HOURS) > 0;
+        String role = jwtService.getRole(token);
+        return userRepository.isCurrentLoginSession(
+                email,
+                role,
+                jwtService.getExpiration(token));
     }
 }
