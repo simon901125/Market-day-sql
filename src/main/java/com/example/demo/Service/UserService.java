@@ -1,13 +1,12 @@
 package com.example.demo.Service;
 
 import java.nio.charset.StandardCharsets;
-import java.security.SecureRandom;
 import java.security.MessageDigest;
+import java.security.SecureRandom;
 import java.sql.Timestamp;
 import java.time.LocalDateTime;
 import java.util.Base64;
 import java.util.HexFormat;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -19,15 +18,20 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.example.demo.Repository.UserRepository;
-import com.example.demo.entity.GoogleTokenInfo;
-import com.example.demo.entity.Users;
-import com.example.demo.dto.EmailVerificationRequest;
-import com.example.demo.dto.GoogleCredentialRequest;
-import com.example.demo.dto.LocalLoginRequest;
-import com.example.demo.dto.LocalRegisterRequest;
-import com.example.demo.dto.RequestPasswordResetRequest;
-import com.example.demo.dto.ResetPasswordRequest;
-import com.example.demo.dto.UpdateUserProfileRequest;
+import com.example.demo.dto.ApiResponse;
+import com.example.demo.dto.request.EmailVerificationRequest;
+import com.example.demo.dto.request.GoogleCredentialRequest;
+import com.example.demo.dto.request.LocalLoginRequest;
+import com.example.demo.dto.request.LocalRegisterRequest;
+import com.example.demo.dto.request.RequestPasswordResetRequest;
+import com.example.demo.dto.request.ResetPasswordRequest;
+import com.example.demo.dto.request.UpdateUserProfileRequest;
+import com.example.demo.dto.response.GoogleTokenInfo;
+import com.example.demo.dto.response.LoginResponse;
+import com.example.demo.dto.response.LoginUserResponse;
+import com.example.demo.dto.response.PasswordResetVerificationResponse;
+import com.example.demo.dto.response.UserProfileResponse;
+import com.example.demo.dto.response.UserResponse;
 
 @Service
 public class UserService {
@@ -48,52 +52,53 @@ public class UserService {
     private String googleClientId;
 
     private static final SecureRandom SECURE_RANDOM = new SecureRandom();
-    public List<Users> findAllUsers() {
-        return userRepository.findAllUsers();
+    public ApiResponse<List<UserResponse>> findAllUsers() {
+        return ApiResponse.success("Users retrieved successfully", userRepository.findAllUsers());
     }
 
-    public String registerLocal(LocalRegisterRequest user, String role) {
+    public ApiResponse<Void> registerLocal(LocalRegisterRequest user, String role) {
         if (isAdminRole(role)) {
-            return "Admin accounts must be created by the system";
+            return ApiResponse.fail("Admin accounts must be created by the system");
         }
         if (userRepository.existsByEmail(user.getEmail())) {
-            return "Email already registered";
+            return ApiResponse.fail("Email already registered");
         }
 
         Long userId = userRepository.createLocalUser(
                 role,
                 user.getName(),
                 user.getEmail(),
-                authService.hashPassword(user.getPassword()));
+                authService.hashPassword(user.getPassword()),
+                user.getPhone());
 
         String verificationCode = generateVerificationCode();
         userRepository.deleteEmailVerificationTokensByUserId(userId);
         userRepository.createEmailVerificationToken(userId, verificationCode, LocalDateTime.now().plusMinutes(10));
         emailService.sendVerificationCode(user.getEmail(), verificationCode);
-        return "User registered successfully. Verification code has been sent to email";
+        return ApiResponse.success("User registered successfully. Verification code has been sent to email");
     }
 
-    public String registerGoogle(GoogleCredentialRequest body, String role) {
+    public ApiResponse<Void> registerGoogle(GoogleCredentialRequest body, String role) {
         if (isAdminRole(role)) {
-            return "Admin accounts do not support Google registration";
+            return ApiResponse.fail("Admin accounts do not support Google registration");
         }
         String credential = body.getCredential();
         if (credential == null || credential.isBlank()) {
-            return "Google credential is required";
+            return ApiResponse.fail("Google credential is required");
         }
 
         GoogleTokenInfo tokenInfo = authService.verifyGoogleCredential(credential);
         if (tokenInfo == null) {
-            return "Invalid Google credential";
+            return ApiResponse.fail("Invalid Google credential");
         }
 
         String validationMessage = validateGoogleTokenInfo(tokenInfo);
         if (validationMessage != null) {
-            return validationMessage;
+            return ApiResponse.fail(validationMessage);
         }
 
         if (userRepository.existsByEmail(tokenInfo.getEmail())) {
-            return "Google account has already register";
+            return ApiResponse.fail("Google account has already register");
         }
 
         Long userId = userRepository.createGoogleUser(role, tokenInfo.getName(), tokenInfo.getEmail());
@@ -103,34 +108,34 @@ public class UserService {
         userRepository.createEmailVerificationToken(userId, verificationCode, LocalDateTime.now().plusMinutes(10));
         emailService.sendVerificationCode(tokenInfo.getEmail(), verificationCode);
 
-        return "Google user registered successfully. Verification code has been sent to email";
+        return ApiResponse.success("Google user registered successfully. Verification code has been sent to email");
     }
 
     @Transactional
-    public Map<String, Object> loginLocal(LocalLoginRequest body, String expectedRole) {
+    public ApiResponse<LoginResponse> loginLocal(LocalLoginRequest body, String expectedRole) {
         Optional<Map<String, Object>> userData = userRepository.findLocalUserByEmail(body.getEmail());
 
         if (userData.isEmpty()
                 || !authService.matchesPassword(body.getPassword(), (String) userData.get().get("password_hash"))) {
-            return Map.of("message", "Invalid email or password");
+            return ApiResponse.fail("Invalid email or password");
         }
         if (userData.get().get("emailVerifiedAt") == null) {
-            return Map.of("message", "Email is not verified");
+            return ApiResponse.fail("Email is not verified");
         }
         if (!"ACTIVE".equals(userData.get().get("status"))) {
-            return Map.of("message", "Account is not active or isdeleted");
+            return ApiResponse.fail("Account is not active or isdeleted");
         }
         String role = userData.get().get("role").toString();
 
         if (!expectedRole.equals(role)) {//如果該登入者的帳號與密碼不符合其身分(ex:用攤主的資訊來登入主辦帳號)
-            return Map.of("message", "This account cannot login from this portal");
+            return ApiResponse.fail("This account cannot login from this portal");
         }
 
         LocalDateTime sessionExpiresAt = userRepository.startLoginSession(
                 toLong(userData.get().get("id")),
                 jwtService.calculateExpiration());
         if (sessionExpiresAt == null) {
-            return Map.of("message", "Login status update failed");
+            return ApiResponse.fail("Login status update failed");
         }
         userData.get().put("isLogin", true);
 
@@ -141,46 +146,46 @@ public class UserService {
     }
 
     @Transactional
-    public Map<String, Object> loginGoogle(GoogleCredentialRequest body, String expectedRole) {
+    public ApiResponse<LoginResponse> loginGoogle(GoogleCredentialRequest body, String expectedRole) {
         if (isAdminRole(expectedRole)) {
-            return Map.of("message", "Admin accounts do not support Google login");
+            return ApiResponse.fail("Admin accounts do not support Google login");
         }
         String credential = body.getCredential();
         if (credential == null || credential.isBlank()) {
-            return Map.of("message", "Google credential is required");
+            return ApiResponse.fail("Google credential is required");
         }
 
         GoogleTokenInfo tokenInfo = authService.verifyGoogleCredential(credential);
         if (tokenInfo == null) {
-            return Map.of("message", "Invalid Google credential");
+            return ApiResponse.fail("Invalid Google credential");
         }
 
         String validationMessage = validateGoogleTokenInfo(tokenInfo);
         if (validationMessage != null) {
-            return Map.of("message", validationMessage);
+            return ApiResponse.fail(validationMessage);
         }
         Optional<Map<String, Object>> userData = userRepository.findProfileByEmail(tokenInfo.getEmail());
         if (userData.isEmpty()) {
-            return Map.of("message", "Google account is not registered");
+            return ApiResponse.fail("Google account is not registered");
         }
         if (userData.get().get("emailVerifiedAt") == null) {
-            return Map.of("message", "Email is not verified");
+            return ApiResponse.fail("Email is not verified");
         }
         if (!"ACTIVE".equals(userData.get().get("status"))) {
-            return Map.of("message", "Account is not active");
+            return ApiResponse.fail("Account is not active");
         }
 
         //比對身分與登入帳號者
         String role = userData.get().get("role").toString();
         if (!expectedRole.equals(role)) {
-            return Map.of("message", "This account cannot login from this portal");
+            return ApiResponse.fail("This account cannot login from this portal");
         }
 
         LocalDateTime sessionExpiresAt = userRepository.startLoginSession(
                 toLong(userData.get().get("id")),
                 jwtService.calculateExpiration());
         if (sessionExpiresAt == null) {
-            return Map.of("message", "Login status update failed");
+            return ApiResponse.fail("Login status update failed");
         }
         userData.get().put("isLogin", true);
 
@@ -190,20 +195,20 @@ public class UserService {
                 sessionExpiresAt);
     }
 
-    public Map<String, Object> logout(String authorizationHeader) {
+    public ApiResponse<Void> logout(String authorizationHeader) {
         String token = jwtService.extractTokenFromAuthorizationHeader(authorizationHeader);
         if (token == null || token.isBlank()) {
-            return Map.of("message", "Authorization token is required");
+            return ApiResponse.fail("Authorization token is required");
         }
         if (!jwtService.isTokenValid(token)) {
-            return Map.of("message", "Invalid or expired token");
+            return ApiResponse.fail("Invalid or expired token");
         }
 
         String email = jwtService.getEmail(token);
         userRepository.markLogoutByEmail(email);
         //將token放入失效名單
         jwtService.revokeToken(token);
-        return Map.of("message", "Logout successful");
+        return ApiResponse.success("Logout successful");
     }
 
     @Scheduled(fixedRate = 60_000)
@@ -211,38 +216,38 @@ public class UserService {
         userRepository.autoLogoutExpiredUsers();
     }
 
-    public Map<String, Object> getCurrentUser(String authorizationHeader) {
+    public ApiResponse<UserProfileResponse> getCurrentUser(String authorizationHeader) {
         String token = jwtService.extractTokenFromAuthorizationHeader(authorizationHeader);
 
         String email = jwtService.getEmail(token);
         return userRepository.findProfileByEmail(email)
-                .<Map<String, Object>>map(user -> Map.of("message", "User info retrieved successfully", "user", user))
-                .orElseGet(() -> Map.of("message", "User not found"));
+                .map(user -> ApiResponse.success("User info retrieved successfully", new UserProfileResponse(user)))
+                .orElseGet(() -> ApiResponse.fail("User not found"));
     }
 
-    public Map<String, Object> updateCurrentUser(String authorizationHeader, UpdateUserProfileRequest body) {
+    public ApiResponse<UserProfileResponse> updateCurrentUser(String authorizationHeader, UpdateUserProfileRequest body) {
         String token = jwtService.extractTokenFromAuthorizationHeader(authorizationHeader);
 
         String email = jwtService.getEmail(token);
         //////////////////////////
         int updatedRows = userRepository.updateProfileByEmail(email, body.getName(), body.getPhone());
         if (updatedRows == 0) {
-            return Map.of("message", "User not found");
+            return ApiResponse.fail("User not found");
         }
 
         return userRepository.findProfileByEmail(email)
-                .<Map<String, Object>>map(user -> Map.of("message", "User profile updated successfully", "user", user))
-                .orElseGet(() -> Map.of("message", "User not found"));
+                .map(user -> ApiResponse.success("User profile updated successfully", new UserProfileResponse(user)))
+                .orElseGet(() -> ApiResponse.fail("User not found"));
     }
 
     @Transactional
-    public Map<String, Object> deactivateCurrentAccount(String authorizationHeader) {
+    public ApiResponse<Void> deactivateCurrentAccount(String authorizationHeader) {
         String token = jwtService.extractTokenFromAuthorizationHeader(authorizationHeader);
         if (token == null || token.isBlank()) {
-            return Map.of("message", "Authorization token is required");
+            return ApiResponse.fail("Authorization token is required");
         }
         if (!jwtService.isTokenValid(token)) {
-            return Map.of("message", "Invalid or expired token");
+            return ApiResponse.fail("Invalid or expired token");
         }
 
         String email = jwtService.getEmail(token);
@@ -250,40 +255,40 @@ public class UserService {
         Map<String, Object> user = userRepository.findProfileByEmail(email)
                 .orElse(null);
         if (user == null) {
-            return Map.of("message", "User not found");
+            return ApiResponse.fail("User not found");
         }
 
         String role = user.get("role").toString();
         if (!role.equals(tokenRole)) {
-            return Map.of("message", "Account role does not match token role");
+            return ApiResponse.fail("Account role does not match token role");
         }
         if (!"ACTIVE".equals(user.get("status"))) {
-            return Map.of("message", "Account is not active");
+            return ApiResponse.fail("Account is not active");
         }
         //根據role先判斷是否該帳號還有連結的服務沒有完成
         Long userId = ((Number) user.get("id")).longValue();
         if ("VENDOR".equals(role)) {
             if (userRepository.existsActiveVendorApplication(userId)) {
-                return Map.of("message", "Account cannot be deactivated while vendor applications are still in progress");
+                return ApiResponse.fail("Account cannot be deactivated while vendor applications are still in progress");
             }
         } else if ("ORGANIZER".equals(role)) {
             if (userRepository.existsActiveOrganizerEvent(userId)) {
-                return Map.of("message", "Account cannot be deactivated while organizer events are still in progress");
+                return ApiResponse.fail("Account cannot be deactivated while organizer events are still in progress");
             }
         } else {
-            return Map.of("message", "This account role cannot be deactivated from this API");
+            return ApiResponse.fail("This account role cannot be deactivated from this API");
         }
 
         int updatedRows = userRepository.deactivateUserById(userId);
         if (updatedRows == 0) {
-            return Map.of("message", "Account deactivation failed");
+            return ApiResponse.fail("Account deactivation failed");
         }
 
-        return Map.of("message", "Account deactivated successfully");
+        return ApiResponse.success("Account deactivated successfully");
     }
 
-    public Map<String, Object> verifyCreateAccountEmail(EmailVerificationRequest body) {
-        Map<String, Object> validationError = validateVerificationRequest(body);
+    public ApiResponse<Void> verifyCreateAccountEmail(EmailVerificationRequest body) {
+        ApiResponse<Void> validationError = validateVerificationRequest(body);
         //確認輸入沒有錯誤(email+code)
         if (validationError != null) {
             return validationError;
@@ -293,12 +298,12 @@ public class UserService {
                 body,
                 UserRepository.TOKEN_TYPE_EMAIL_VERIFY);
         if (tokenData.isEmpty()) {
-            return Map.of("message", "Invalid or expired verification code");
+            return ApiResponse.fail("Invalid or expired verification code");
         }
 
         Map<String, Object> token = tokenData.get();
         if (token.get("email_verified_at") != null) {
-            return Map.of("message", "Email already verified");
+            return ApiResponse.fail("Email already verified");
         }
 
         Long userId = ((Number) token.get("user_id")).longValue();
@@ -306,10 +311,10 @@ public class UserService {
         userRepository.markEmailVerified(userId);
         userRepository.deleteUserToken(tokenId, UserRepository.TOKEN_TYPE_EMAIL_VERIFY);
 
-        return Map.of("message", "Email verified successfully");
+        return ApiResponse.success("Email verified successfully");
     }
 
-    public Map<String, Object> requestPasswordReset(RequestPasswordResetRequest body) {
+    public ApiResponse<Void> requestPasswordReset(RequestPasswordResetRequest body) {
         Optional<Map<String, Object>> userData = userRepository.findLocalUserByEmail(body.getEmail());
         if (userData.isPresent()) {
             Long userId = ((Number) userData.get().get("id")).longValue();
@@ -325,23 +330,21 @@ public class UserService {
             emailService.sendPasswordResetCode(body.getEmail(), verificationCode);
         }
 
-        return Map.of(
-                "message",
-                "If the email belongs to a local account, a verification code has been sent");
+        return ApiResponse.success("If the email belongs to a local account, a verification code has been sent");
     }
 
     @Transactional
-    public Map<String, Object> verifyResetPasswordEmail(EmailVerificationRequest body) {
-        Map<String, Object> validationError = validateVerificationRequest(body);
+    public ApiResponse<PasswordResetVerificationResponse> verifyResetPasswordEmail(EmailVerificationRequest body) {
+        ApiResponse<Void> validationError = validateVerificationRequest(body);
         if (validationError != null) {
-            return validationError;
+            return ApiResponse.fail(validationError.getMessage());
         }
 
         Optional<Map<String, Object>> tokenData = findValidVerificationToken(
                 body,
                 UserRepository.TOKEN_TYPE_PASSWORD_RESET);
         if (tokenData.isEmpty()) {
-            return Map.of("message", "Invalid or expired verification code");
+            return ApiResponse.fail("Invalid or expired verification code");
         }
 
         Map<String, Object> verificationToken = tokenData.get();
@@ -353,7 +356,7 @@ public class UserService {
                 tokenId,
                 UserRepository.TOKEN_TYPE_PASSWORD_RESET);
         if (consumedTokens == 0) {
-            return Map.of("message", "Invalid or expired verification code");
+            return ApiResponse.fail("Invalid or expired verification code");
         }
         userRepository.createUserToken(
                 userId,
@@ -361,31 +364,31 @@ public class UserService {
                 UserRepository.TOKEN_TYPE_PASSWORD_RESET,
                 LocalDateTime.now().plusMinutes(10));
 
-        return Map.of(
-                "message", "Password reset email verified successfully",
-                "resetToken", resetToken);
+        return ApiResponse.success(
+                "Password reset email verified successfully",
+                new PasswordResetVerificationResponse(resetToken));
     }
 
     @Transactional
-    public Map<String, Object> resetPassword(ResetPasswordRequest body) {
+    public ApiResponse<Void> resetPassword(ResetPasswordRequest body) {
         if (body.getResetToken() == null || body.getResetToken().isBlank()) {
-            return Map.of("message", "Reset token is required");
+            return ApiResponse.fail("Reset token is required");
         }
         if (body.getPassword() == null || body.getPassword().isBlank()) {
-            return Map.of("message", "Password is required");
+            return ApiResponse.fail("Password is required");
         }
 
         Optional<Map<String, Object>> tokenData = userRepository.findUserToken(
                 hashResetToken(body.getResetToken()),
                 UserRepository.TOKEN_TYPE_PASSWORD_RESET);
         if (tokenData.isEmpty()) {
-            return Map.of("message", "Invalid or expired reset token");
+            return ApiResponse.fail("Invalid or expired reset token");
         }
 
         Map<String, Object> resetToken = tokenData.get();
         LocalDateTime expiresAt = toLocalDateTime(resetToken.get("expires_at"));
         if (expiresAt == null || expiresAt.isBefore(LocalDateTime.now())) {
-            return Map.of("message", "Invalid or expired reset token");
+            return ApiResponse.fail("Invalid or expired reset token");
         }
 
         Long userId = ((Number) resetToken.get("user_id")).longValue();
@@ -394,17 +397,17 @@ public class UserService {
                 tokenId,
                 UserRepository.TOKEN_TYPE_PASSWORD_RESET);
         if (consumedTokens == 0) {
-            return Map.of("message", "Invalid or expired reset token");
+            return ApiResponse.fail("Invalid or expired reset token");
         }
 
         int updatedRows = userRepository.updateLocalPasswordByUserId(
                 userId,
                 authService.hashPassword(body.getPassword()));
         if (updatedRows == 0) {
-            return Map.of("message", "Password reset failed");
+            return ApiResponse.fail("Password reset failed");
         }
 
-        return Map.of("message", "Password reset successfully");
+        return ApiResponse.success("Password reset successfully");
     }
 
     private String generateVerificationCode() {
@@ -427,12 +430,12 @@ public class UserService {
         }
     }
 
-    private Map<String, Object> validateVerificationRequest(EmailVerificationRequest body) {
+    private ApiResponse<Void> validateVerificationRequest(EmailVerificationRequest body) {
         if (body.getEmail() == null || body.getEmail().isBlank()) {
-            return Map.of("message", "Email is required");
+            return ApiResponse.fail("Email is required");
         }
         if (body.getCode() == null || !body.getCode().matches("\\d{6}")) {
-            return Map.of("message", "6-digit verification code is required");
+            return ApiResponse.fail("6-digit verification code is required");
         }
         return null;
     }
@@ -468,29 +471,21 @@ public class UserService {
         return null;
     }
 
-    private Map<String, Object> buildLoginResponse(
+    private ApiResponse<LoginResponse> buildLoginResponse(
             Map<String, Object> userData,
             String message,
             LocalDateTime sessionExpiresAt) {
         String userEmail = userData.get("email").toString();
         String role = userData.get("role").toString();
-        String token = jwtService.generateToken(
+        String token = jwtService.generateToken(userEmail, role, sessionExpiresAt);
+
+        LoginUserResponse user = new LoginUserResponse(
                 userEmail,
+                userData.get("name"),
                 role,
-                sessionExpiresAt);
-
-        Map<String, Object> user = new HashMap<>();
-        user.put("email", userEmail);
-        user.put("name", userData.get("name"));
-        user.put("role", role);
-        user.put("status", userData.get("status"));
-        user.put("isLogin", userData.get("isLogin"));
-
-        Map<String, Object> response = new HashMap<>();
-        response.put("message", message);
-        response.put("token", token);
-        response.put("user", user);
-        return response;
+                userData.get("status"),
+                userData.get("isLogin"));
+        return ApiResponse.success(message, new LoginResponse(token, user));
     }
 
     private Long toLong(Object value) {

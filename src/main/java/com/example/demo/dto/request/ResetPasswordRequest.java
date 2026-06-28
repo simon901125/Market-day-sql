@@ -1,23 +1,21 @@
-package com.example.demo.dto;
+package com.example.demo.dto.request;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
 
-@Schema(description = "Password reset request")
+@Schema(description = "重設密碼請求")
 public class ResetPasswordRequest {
 
     @NotBlank(message = "Reset token is required")
-    @Schema(description = "One-time token returned after email code verification")
+    @Schema(description = "信箱驗證成功後回傳的一次性 resetToken")
     private String resetToken;
 
     @NotBlank(message = "Password is required")
     @Pattern(
             regexp = "^(?=.*[A-Za-z])(?=.*\\d).{8,}$",
             message = "Password must be at least 8 characters and contain letters and numbers")
-    @Schema(
-            description = "New password with at least 8 characters, including letters and numbers",
-            example = "NewPassword123")
+    @Schema(description = "新密碼，至少 8 個字元，且需包含英文與數字", example = "NewPassword123")
     private String password;
 
     public String getResetToken() {

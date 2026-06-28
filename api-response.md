@@ -1,82 +1,94 @@
-# 統一 API Response 格式
+# API Response 與 DTO 架構
 
-本專案由 `GlobalResponseAdvice` 統一包裝 Controller 回傳內容。目前套用在：
+更新日期：2026-06-29
 
-- `UserController`
-- `StallController`
-- `OrganizerController`
+目前 `demo` 的 Controller 直接回傳 `ApiResponse<T>`，其中 `T` 會是對應的 Response DTO。
+Request body 使用 `dto/request` 內的 Request DTO，Response data 使用 `dto/response` 內的 Response DTO。
 
-Controller / Service 可以先回傳原本資料、`String`、`Map` 或 `List`，最後會統一整理成以下格式。
+## 統一回傳格式
 
-## Response Body
-
-```json
-{
-  "statusCode": 200,
-  "message": "Success",
-  "messageDetails": "Executed API: GET /api/organizer/account",
-  "data": {}
-}
-```
-
-## 欄位說明
-
-| key | 型別 | 說明 |
-| --- | --- | --- |
-| `statusCode` | number | API 回傳狀態碼。一般成功為 `200`；DTO 驗證錯誤、JWT/filter 錯誤會依情境回傳 `400` 或 `401`。 |
-| `message` | string | 統一回覆訊息。若 Service 回傳 `Map` 且包含 `message`，該值會被提升到外層 `message`。 |
-| `messageDetails` | string / null | 成功時自動填入執行 API，例如 `Executed API: GET /api/vendor/account`。失敗時通常為 `null`。 |
-| `data` | object / array / string / null | 實際回傳資料。若原始 `Map` 中有 `message`，會從 `data` 移除，避免重複。 |
-
-## 成功範例
-
-```json
-{
-  "statusCode": 200,
-  "message": "Success",
-  "messageDetails": "Executed API: GET /api/organizer/account",
-  "data": {
-    "organizerName": "organizer1",
-    "contactName": "organizer1 contact",
-    "contactPhone": "0922000001",
-    "contactEmail": "organizer1@example.test"
-  }
-}
-```
-
-## Service 回傳 message 的處理
-
-Service 回傳：
-
-```java
-return Map.of(
-    "message", "Login successful",
-    "token", token
-);
-```
-
-最終 Response：
+所有 API 回傳格式如下：
 
 ```json
 {
   "statusCode": 200,
   "message": "Login successful",
-  "messageDetails": "Executed API: POST /api/vendor/local-login",
-  "data": {
-    "token": "<JWT_TOKEN>"
-  }
+  "messageDetails": null,
+  "data": {}
 }
 ```
 
-## 主辦方報名列表範例
+| 欄位 | 型別 | 說明 |
+| --- | --- | --- |
+| `statusCode` | number | 成功通常為 `200`，一般錯誤為 `400`，JWT 驗證失敗為 `401`。 |
+| `message` | string | API 結果訊息。錯誤訊息會透過 `ApiResponse.fail(...)` 統一轉成中文。 |
+| `messageDetails` | string / null | 目前多數 Controller 直接回傳 `ApiResponse<T>`，因此通常為 `null`。 |
+| `data` | object / array / null | 成功時放 Response DTO；失敗時通常為 `null`。 |
 
-`GET /api/organizer/applications/search` 只需要提供 `Authorization` header。後端會從 JWT 解析目前登入主辦方，查詢該主辦方所有 `publish_status = PUBLISHED` 活動的報名資料。
+## DTO 分區
+
+| 類型 | 位置 | 用途 |
+| --- | --- | --- |
+| Request DTO | `src/main/java/com/example/demo/dto/request` | 接收 request body，例如登入、註冊、驗證碼、重設密碼、攤位選擇。 |
+| Response DTO | `src/main/java/com/example/demo/dto/response` | API 成功時放入 `ApiResponse<T>.data` 的資料結構。 |
+| API wrapper | `src/main/java/com/example/demo/dto/ApiResponse.java` | 統一包裝 `statusCode`、`message`、`messageDetails`、`data`。 |
+
+目前常用 Response DTO 包含：
+
+| Response DTO | 主要使用 API |
+| --- | --- |
+| `LoginResponse` | local / Google login |
+| `LoginUserResponse` | `LoginResponse.user` |
+| `UserProfileResponse` | `/api/auth/me`、`/api/users/me` |
+| `UserResponse` | `/usersall` |
+| `VendorAccountResponse` | `/api/vendor/account` |
+| `VendorStallMapResponse` | `/api/vendor/stall-map/{applicationNo}` |
+| `OrganizerAccountResponse` | `/api/organizer/account` |
+| `OrganizerApplicationSummaryResponse` | `/api/organizer/applications/search` |
+| `OrganizerApplicationDetailResponse` | `/api/organizer/applications/{id}` |
+| `EventStallStatusResponse` | `/api/events/{eventId}/stallsStatus` |
+| `StallSelectionResponse` | `/api/events/{eventId}/stalls/select` |
+| `PasswordResetVerificationResponse` | `/api/auth/resetPassword/emailVerify` |
+
+## 登入成功範例
+
+`POST /api/vendor/local-login`
 
 ```json
 {
   "statusCode": 200,
-  "message": "Success",
-  "messageDetails": "Executed API: GET /api/organizer/applications/search",
+  "message": "Login successful",
+  "messageDetails": null,
+  "data": {
+    "token": "<JWT_TOKEN>",
+    "user": {
+      "email": "vendor@example.com",
+      "name": "vendor1",
+      "role": "VENDOR",
+      "provider": "LOCAL",
+      "emailVerified": true
+    }
+  }
+}
+```
+
+## Organizer 申請列表
+
+`GET /api/organizer/applications/search`
+
+目前此 API：
+
+- 需要 `Authorization` header。
+- 不接收 request body。
+- 回傳目前登入主辦方的全部申請資料。
+- 依 `event_applications.created_at DESC, event_applications.id DESC` 排序。
+- `data` 型別為 `List<OrganizerApplicationSummaryResponse>`。
+
+```json
+{
+  "statusCode": 200,
+  "message": "Organizer applications retrieved successfully",
+  "messageDetails": null,
   "data": [
     {
       "applicationId": 1,
@@ -86,70 +98,192 @@ return Map.of(
       "eventTime": "2026-09-01 11:00 - 2026-09-03 19:00",
       "eventStartDate": "2026-09-01",
       "eventEndDate": "2026-09-03",
+      "eventStartTime": "11:00:00",
+      "eventEndTime": "19:00:00",
       "applyDates": "2026-09-01,2026-09-02",
-      "vendorName": "vendor1 品牌",
+      "vendorName": "vendor1",
       "vendorOwnerName": "vendor1",
       "brandType": "餐飲",
       "appliedAt": "2026-07-01T14:00:00",
-      "applicationStatus": "報名完成"
+      "applicationStatus": "報名成功"
     }
   ]
 }
 ```
 
-`applicationStatus` 由 `ApplicationStatusService` 推導，目前可能值：
+## Organizer 申請明細
 
-```text
-待審核
-審核未通過
-待付款
-待選位
-報名完成
-保證金已退還
-退款申請中
-退款處理中
-已退款
-已取消
+`GET /api/organizer/applications/{id}`
+
+需要 `Authorization` header。
+`data` 型別為 `OrganizerApplicationDetailResponse`，主要包含：
+
+| 區塊 | 說明 |
+| --- | --- |
+| `applicationId` / `applicationNo` / `applicationStatus` | 申請基本資訊。 |
+| `event` | 活動名稱、時間、地點、封面圖等資訊。 |
+| `application` | 審核、付款、保證金、退款與申請備註等狀態。 |
+| `statusTimeline` | 申請、付款、退款相關時間。 |
+| `vendor` | 攤主聯絡資料。 |
+| `brand` | 品牌資料。 |
+| `registration` | 報名日期與已選攤位資料。 |
+| `fee` | 費用、付款與退款資料。 |
+
+```json
+{
+  "statusCode": 200,
+  "message": "Organizer application detail retrieved successfully",
+  "messageDetails": null,
+  "data": {
+    "applicationId": 1,
+    "applicationNo": "APP-MD0101-V01",
+    "applicationStatus": "退款處理中",
+    "event": {
+      "eventId": 1,
+      "eventTitle": "MD0101",
+      "eventTime": "2026-09-01 11:00:00 - 2026-09-03 19:00:00",
+      "locationName": "市集廣場",
+      "city": "台北市",
+      "district": "中正區",
+      "address": "市集路 1 號",
+      "coverImageUrl": "/images/event.jpg"
+    },
+    "application": {
+      "reviewStatus": "APPROVED",
+      "paymentStatus": "PAID",
+      "depositStatus": "NOT_RETURNED",
+      "refundStatus": "REFUNDING",
+      "appliedAt": "2026-07-01T14:00:00",
+      "reviewNote": null,
+      "applicantNote": "需要插座"
+    },
+    "statusTimeline": {
+      "appliedAt": "2026-07-01T14:00:00",
+      "paymentCreatedAt": "2026-07-02T10:00:00",
+      "paidAt": "2026-07-02T10:10:00",
+      "refundedAt": null
+    },
+    "vendor": {
+      "vendorName": "vendor1",
+      "vendorOwnerName": "vendor1",
+      "vendorPhone": "0912345678",
+      "vendorEmail": "vendor1@example.com",
+      "address": "台北市中正區市集路 1 號"
+    },
+    "brand": {
+      "brandName": "vendor1",
+      "brandType": "餐飲",
+      "categoryName": "甜點",
+      "brandDescription": "手作甜點",
+      "avatarUrl": "/images/vendor-avatar.jpg"
+    },
+    "registration": {
+      "applyDates": "2026-09-01,2026-09-02",
+      "stall": {
+        "stallNo": "A01",
+        "zoneName": "A 區",
+        "width": 2,
+        "length": 3,
+        "height": 2
+      }
+    },
+    "fee": {
+      "baseFee": 2500,
+      "depositAmount": 1000,
+      "otherFeeAmount": 100,
+      "totalAmount": 3600,
+      "payment": {
+        "paymentNo": "PAY-001",
+        "paymentStatus": "PAID",
+        "paidAt": "2026-07-02T10:10:00"
+      },
+      "refund": {
+        "refundNo": "RF-001",
+        "refundAmount": 3600,
+        "refundStatus": "REFUNDING",
+        "refundedAt": null
+      }
+    }
+  }
+}
 ```
 
-保證金狀態需符合已付款、已選位、活動已結束且 `deposit_status = RETURNED`，才會顯示 `保證金已退還`。
+## 錯誤訊息
 
-## 錯誤範例
+錯誤訊息會直接回傳中文。
+Service 或 Filter 即使傳入英文 key，也會透過 `ApiResponse.fail(...)` 轉成中文。
+
+### Email 重複註冊
 
 ```json
 {
   "statusCode": 400,
-  "message": "Invalid email or password",
+  "message": "此 Email 已被註冊",
   "messageDetails": null,
   "data": null
 }
 ```
 
-DTO 驗證錯誤：
+### 登入失敗
 
 ```json
 {
   "statusCode": 400,
-  "message": "Validation failed: email: Invalid email format; password: Password must contain letters and numbers",
+  "message": "Email 或密碼錯誤",
   "messageDetails": null,
   "data": null
 }
 ```
 
-JWT/filter 錯誤：
+### DTO 驗證失敗
+
+```json
+{
+  "statusCode": 400,
+  "message": "資料驗證失敗：電子信箱：電子信箱格式不正確; 密碼：密碼為必填",
+  "messageDetails": null,
+  "data": null
+}
+```
+
+### JWT 未提供
 
 ```json
 {
   "statusCode": 401,
-  "message": "Session expired",
+  "message": "請提供授權 token",
   "messageDetails": null,
   "data": null
 }
 ```
 
-## 開發注意事項
+### JWT 無效或過期
 
-- 新增 Controller 時，若要套用統一 response，需確認 `GlobalResponseAdvice.supports()` 已包含該 Controller。
-- 若 Controller 已直接回傳 `ApiResponse`，不會重複包裝；成功時仍會補上 `messageDetails`。
-- `messageDetails` 只記錄 HTTP method 與 API path，不包含 query string、request body 或 JWT。
-- Service 業務錯誤目前仍多數以 `Map.of("message", "...")` 回傳，HTTP status 尚未全部語意化。
+```json
+{
+  "statusCode": 401,
+  "message": "Token 無效或已過期",
+  "messageDetails": null,
+  "data": null
+}
+```
+
+### Session 過期
+
+```json
+{
+  "statusCode": 401,
+  "message": "登入狀態已過期，請重新登入",
+  "messageDetails": null,
+  "data": null
+}
+```
+
+## 實作注意事項
+
+- Controller 應直接回傳 `ApiResponse<T>`，不要再回傳 `Map<String, Object>` 作為正式 response。
+- 成功資料請使用 `dto/response` 內的 Response DTO。
+- Request body 請使用 `dto/request` 內的 Request DTO。
+- 錯誤請使用 `ApiResponse.fail(...)`，讓錯誤訊息可統一轉成中文。
+- JWT Filter 失敗也會透過 `ApiResponse.fail(statusCode, message)` 回傳中文錯誤。
+- `messageDetails` 目前通常為 `null`；舊版由 `GlobalResponseAdvice` 自動補 `Executed API: ...` 的設計已不是主要資料傳遞方式。

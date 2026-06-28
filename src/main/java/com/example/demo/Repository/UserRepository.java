@@ -13,7 +13,7 @@ import org.springframework.jdbc.support.GeneratedKeyHolder;
 import org.springframework.jdbc.support.KeyHolder;
 import org.springframework.stereotype.Repository;
 
-import com.example.demo.entity.Users;
+import com.example.demo.dto.response.UserResponse;
 
 @Repository
 public class UserRepository {
@@ -24,14 +24,14 @@ public class UserRepository {
     public static final String TOKEN_TYPE_EMAIL_VERIFY = "EMAIL_VERIFY";
     public static final String TOKEN_TYPE_PASSWORD_RESET = "PASSWORD_RESET";
 
-    public List<Users> findAllUsers() {
+    public List<UserResponse> findAllUsers() {
         String sql = """
                 SELECT id, role, name, email, password_hash, phone, provider, status, isLogin, email_verified_at, expired_time, created_at, updated_at
                 FROM users
                 """;
 
         return namedParameterJdbcTemplate.query(sql, (rs, rowNum) -> {
-            Users user = new Users();
+            UserResponse user = new UserResponse();
             user.setId(rs.getLong("id"));
             user.setRole(rs.getString("role"));
             user.setName(rs.getString("name"));
@@ -57,16 +57,17 @@ public class UserRepository {
         return count != null && count > 0;
     }
 
-    public Long createLocalUser(String role, String name, String email, String passwordHash) {
+    public Long createLocalUser(String role, String name, String email, String passwordHash, String phone) {
         String sql = """
-                INSERT INTO users (role, name, email, password_hash, provider)
-                VALUES (:role, :name, :email, :passwordHash, :provider)
+                INSERT INTO users (role, name, email, password_hash, phone, provider)
+                VALUES (:role, :name, :email, :passwordHash, :phone, :provider)
                 """;
         MapSqlParameterSource params = new MapSqlParameterSource()
                 .addValue("role", role)
                 .addValue("name", name)
                 .addValue("email", email)
                 .addValue("passwordHash", passwordHash)
+                .addValue("phone", phone)
                 .addValue("provider", "LOCAL");
         KeyHolder keyHolder = new GeneratedKeyHolder();
         namedParameterJdbcTemplate.update(sql, params, keyHolder, new String[] {"id"});
@@ -259,21 +260,6 @@ public class UserRepository {
         return namedParameterJdbcTemplate.update(sql, Map.of());
     }
 
-    public int updateLocalPasswordByUserId(Long userId, String passwordHash) {
-        String sql = """
-                UPDATE users
-                SET password_hash = :passwordHash,
-                    updated_at = SYSDATETIME()
-                WHERE id = :userId
-                  AND provider = :provider
-                """;
-        Map<String, Object> map = new HashMap<>();
-        map.put("userId", userId);
-        map.put("passwordHash", passwordHash);
-        map.put("provider", "LOCAL");
-        return namedParameterJdbcTemplate.update(sql, map);
-    }
-
     public boolean isCurrentLoginSession(
             String email,
             String role,
@@ -293,6 +279,36 @@ public class UserRepository {
         map.put("expiresAt", expiresAt.withNano(0));
         Integer count = namedParameterJdbcTemplate.queryForObject(sql, map, Integer.class);
         return count != null && count > 0;
+    }
+
+    public int updateLocalPasswordByEmail(String email, String passwordHash) {
+        String sql = """
+                UPDATE users
+                SET password_hash = :passwordHash,
+                    updated_at = SYSDATETIME()
+                WHERE email = :email
+                  AND provider = :provider
+                """;
+        Map<String, Object> map = new HashMap<>();
+        map.put("email", email);
+        map.put("passwordHash", passwordHash);
+        map.put("provider", "LOCAL");
+        return namedParameterJdbcTemplate.update(sql, map);
+    }
+
+    public int updateLocalPasswordByUserId(Long userId, String passwordHash) {
+        String sql = """
+                UPDATE users
+                SET password_hash = :passwordHash,
+                    updated_at = SYSDATETIME()
+                WHERE id = :userId
+                  AND provider = :provider
+                """;
+        Map<String, Object> map = new HashMap<>();
+        map.put("userId", userId);
+        map.put("passwordHash", passwordHash);
+        map.put("provider", "LOCAL");
+        return namedParameterJdbcTemplate.update(sql, map);
     }
 
     public void createEmailVerificationToken(Long userId, String token, LocalDateTime expiresAt) {
