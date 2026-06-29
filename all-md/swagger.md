@@ -274,10 +274,8 @@ Bearer <JWT_TOKEN>
 | `eventId` | 活動 ID。 |
 | `eventTitle` | 活動名稱。 |
 | `eventTime` | 活動時間文字。 |
-| `eventStartDate` | 活動開始日期。 |
-| `eventEndDate` | 活動結束日期。 |
-| `eventStartTime` | 活動開始時間。 |
-| `eventEndTime` | 活動結束時間。 |
+| `eventStartAt` | 活動開始日期時間。 |
+| `eventEndAt` | 活動結束日期時間。 |
 | `applyDates` | 申請日期，逗號分隔。 |
 | `vendorName` | 品牌 / 攤主名稱。 |
 | `vendorOwnerName` | 攤主姓名。 |

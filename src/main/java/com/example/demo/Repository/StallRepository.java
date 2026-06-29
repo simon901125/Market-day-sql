@@ -146,9 +146,9 @@ public class StallRepository {
                     e.city,
                     e.district,
                     e.address,
-                    e.start_date AS startDate,
-                    e.end_date AS endDate,
-                    e.end_date AS eventEndDate,
+                    e.start_at AS startAt,
+                    e.end_at AS endAt,
+                    e.end_at AS eventEndAt,
                     refund_data.refundStatus
                 FROM dbo.event_applications a
                 INNER JOIN dbo.vendor_profiles vp ON vp.id = a.vendor_profile_id

@@ -1,6 +1,7 @@
 package com.example.demo.Service;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
@@ -16,6 +17,7 @@ import com.example.demo.Repository.OrganizerRepository;
 import com.example.demo.dto.response.ApiResponse;
 import com.example.demo.dto.response.OrganizerAccountResponse;
 import com.example.demo.dto.response.OrganizerApplicationDetailResponse;
+import com.example.demo.dto.response.OrganizerApplicationSearchResponse;
 import com.example.demo.dto.response.OrganizerApplicationSummaryResponse;
 
 @Service
@@ -23,6 +25,7 @@ public class OrganizerService {
 
     private static final DateTimeFormatter SERVICE_TIME_FORMATTER = DateTimeFormatter.ofPattern("HH:mm");
     private static final DateTimeFormatter SPACE_DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+    private static final DateTimeFormatter DISPLAY_DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
 
     @Autowired
     private OrganizerRepository organizerRepository;
@@ -32,6 +35,9 @@ public class OrganizerService {
 
     @Autowired
     private ApplicationStatusService applicationStatusService;
+
+    @Autowired
+    private PaymentStatusService paymentStatusService;
 
     public ApiResponse<OrganizerAccountResponse> getOrganizerAccount(String authorizationHeader) {
         String token = jwtService.extractTokenFromAuthorizationHeader(authorizationHeader);
@@ -72,19 +78,32 @@ public class OrganizerService {
         return ApiResponse.success("Organizer account retrieved successfully", new OrganizerAccountResponse(account));
     }
 
-    public ApiResponse<List<OrganizerApplicationSummaryResponse>> searchOrganizerApplications(
-            String authorizationHeader) {
+    public ApiResponse<OrganizerApplicationSearchResponse> searchOrganizerApplications(
+            String authorizationHeader,
+            String eventTitle,
+            String status,
+            String brandName,
+            LocalDate registrationStartAt,
+            LocalDate registrationEndAt) {
         Map<String, Object> organizer = getAuthenticatedOrganizer(authorizationHeader);
         if (organizer.containsKey("message")) {
             return ApiResponse.fail(organizer.get("message").toString());
         }
 
         Long organizerUserId = ((Number) organizer.get("userId")).longValue();
-        List<OrganizerApplicationSummaryResponse> applications = organizerRepository.findOrganizerApplications(organizerUserId).stream()
+        LocalDateTime appliedStartAt = registrationStartAt == null ? null : registrationStartAt.atStartOfDay();
+        LocalDateTime appliedEndExclusive = registrationEndAt == null ? null : registrationEndAt.plusDays(1).atStartOfDay();
+        List<OrganizerApplicationSummaryResponse> applications = organizerRepository
+                .findOrganizerApplications(organizerUserId, eventTitle, brandName, appliedStartAt, appliedEndExclusive)
+                .stream()
                 .map(this::withDisplayApplicationStatus)
+                .filter(application -> matchesApplicationStatus(application, status))
+                .map(this::toApplicationSummaryResponse)
                 .map(OrganizerApplicationSummaryResponse::new)
                 .toList();
-        return ApiResponse.success("Organizer applications retrieved successfully", applications);
+        return ApiResponse.success(
+                "Organizer applications retrieved successfully",
+                new OrganizerApplicationSearchResponse(applications));
     }
 
     public ApiResponse<OrganizerApplicationDetailResponse> getOrganizerApplicationDetail(String authorizationHeader, Long applicationId) {
@@ -115,6 +134,26 @@ public class OrganizerService {
         return response;
     }
 
+    private boolean matchesApplicationStatus(Map<String, Object> application, String status) {
+        String normalizedStatus = normalizeText(status);
+        if (normalizedStatus == null || "全部".equals(normalizedStatus)) {
+            return true;
+        }
+        return normalizedStatus.equals(normalizeText(application.get("applicationStatus")));
+    }
+
+    private Map<String, Object> toApplicationSummaryResponse(Map<String, Object> application) {
+        return orderedMap(
+                "applicationId", application.get("applicationId"),
+                "eventTitle", application.get("eventTitle"),
+                "eventTime", application.get("eventTime"),
+                "vendorName", application.get("vendorName"),
+                "brandType", application.get("brandType"),
+                "vendorOwnerName", application.get("vendorOwnerName"),
+                "appliedAt", formatAppliedAt(application),
+                "applicationStatus", application.get("applicationStatus"));
+    }
+
     private Map<String, Object> toApplicationDetailResponse(Map<String, Object> application) {
         Map<String, Object> response = new LinkedHashMap<>();
         response.put("applicationId", application.get("applicationId"));
@@ -127,10 +166,8 @@ public class OrganizerService {
                 "eventSummary", application.get("eventSummary"),
                 "eventDescription", application.get("eventDescription"),
                 "eventTime", formatEventTime(application),
-                "eventStartDate", application.get("eventStartDate"),
-                "eventEndDate", application.get("eventEndDate"),
-                "eventStartTime", application.get("eventStartTime"),
-                "eventEndTime", application.get("eventEndTime"),
+                "eventStartAt", application.get("eventStartAt"),
+                "eventEndAt", application.get("eventEndAt"),
                 "locationName", application.get("locationName"),
                 "city", application.get("eventCity"),
                 "district", application.get("eventDistrict"),
@@ -145,6 +182,7 @@ public class OrganizerService {
                 "applicationStatus", application.get("applicationStatus"),
                 "reviewStatus", application.get("reviewStatus"),
                 "paymentStatus", application.get("paymentStatus"),
+                "paymentDisplayStatus", paymentStatusService.resolvePaymentStatus(application),
                 "depositStatus", application.get("depositStatus"),
                 "refundStatus", application.get("refundStatus"),
                 "isCancelled", application.get("isCancelled"),
@@ -252,22 +290,17 @@ public class OrganizerService {
     }
 
     private String formatEventTime(Map<String, Object> application) {
-        Object startDate = application.get("eventStartDate");
-        Object endDate = application.get("eventEndDate");
-        Object startTime = application.get("eventStartTime");
-        Object endTime = application.get("eventEndTime");
-        if (startDate == null || endDate == null) {
+        LocalDateTime startAt = toLocalDateTime(application.get("eventStartAt"));
+        LocalDateTime endAt = toLocalDateTime(application.get("eventEndAt"));
+        if (startAt == null || endAt == null) {
             return null;
         }
-        StringBuilder eventTime = new StringBuilder(startDate.toString());
-        if (startTime != null) {
-            eventTime.append(" ").append(startTime);
-        }
-        eventTime.append(" - ").append(endDate);
-        if (endTime != null) {
-            eventTime.append(" ").append(endTime);
-        }
-        return eventTime.toString();
+        return startAt.format(DISPLAY_DATE_TIME_FORMATTER) + " - " + endAt.format(DISPLAY_DATE_TIME_FORMATTER);
+    }
+
+    private String formatAppliedAt(Map<String, Object> application) {
+        LocalDateTime appliedAt = appliedAtForSort(application);
+        return appliedAt == null ? null : appliedAt.format(DISPLAY_DATE_TIME_FORMATTER);
     }
 
     private String normalizeText(Object value) {
@@ -333,6 +366,10 @@ public class OrganizerService {
 
     private LocalDateTime appliedAtForSort(Map<String, Object> application) {
         Object value = application.get("appliedAt");
+        return toLocalDateTime(value);
+    }
+
+    private LocalDateTime toLocalDateTime(Object value) {
         if (value instanceof LocalDateTime localDateTime) {
             return localDateTime;
         }

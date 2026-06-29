@@ -26,6 +26,11 @@ Market Day 後端 API 專案，使用 Spring Boot 建置，包含帳號註冊、
 - 錯誤訊息已透過 `ApiResponse.fail(...)` 統一轉為中文，例如 `Email already registered` 會回傳 `此 Email 已被註冊`。
 - `api-response.md` 已更新為目前 `ApiResponse<T>` 與 DTO 架構版本。
 - `swagger.md` 已同步目前 Swagger、DTO、JWT protected APIs 與中文錯誤訊息說明。
+- `market_events` 活動時間欄位改為 `start_at`、`end_at`、`registration_start_at`、`registration_end_at` 四個 `DATETIME2(0)` 欄位；主辦方申請與攤主選位地圖 API 已同步改用 `eventStartAt/eventEndAt`、`startAt/endAt`。
+- `users.status` 停用狀態改用 `DISABLED`；`POST /api/account/deactivate` 會將帳號狀態更新為 `DISABLED`。
+- `market_events.publish_status` 新增 `UNPUBLISH_REQUESTED`，並新增 `event_unpublish_requests` 支援下架申請流程。
+- 新增 `notifications.is_read/read_at` 支援通知中心未讀/已讀狀態。
+- 新增 `admin_operation_logs` 作為管理員後台操作紀錄表。
 
 ### 2026-06-26
 

@@ -194,7 +194,8 @@ public class UserRepository {
                 SELECT COUNT(*)
                 FROM market_events
                 WHERE user_id = :userId
-                  AND (publish_status IS NULL OR publish_status <> N'CANCELLED')
+                  AND end_at >= SYSDATETIME()
+                  AND (publish_status IS NULL OR publish_status NOT IN (N'UNPUBLISHED', N'CANCELLED'))
                 """;
         Map<String, Object> map = new HashMap<>();
         map.put("userId", userId);
@@ -205,7 +206,7 @@ public class UserRepository {
     public int deactivateUserById(Long userId) {
         String sql = """
                 UPDATE users
-                SET status = 'IS_DELETED',
+                SET status = 'DISABLED',
                     isLogin = 0,
                     updated_at = SYSDATETIME()
                 WHERE id = :userId

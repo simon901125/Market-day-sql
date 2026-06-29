@@ -124,7 +124,7 @@ Request body 只需要 `applicationNo` 與 `stallNo`，`eventId` 由後端依申
   "data": {
     "application": {
       "applicationNo": "MD001",
-      "applicationStatus": "報名成功",
+      "applicationStatus": "報名完成",
       "vendorName": "vendor1 攤位",
       "selectedStallId": 123,
       "selectedStall": {
@@ -138,8 +138,8 @@ Request body 只需要 `applicationNo` 與 `stallNo`，`eventId` 由後端依申
     },
     "event": {
       "eventTitle": "MD0101",
-      "startDate": "2026-09-01",
-      "endDate": "2026-09-03",
+      "startAt": "2026-09-01T11:00:00",
+      "endAt": "2026-09-03T19:00:00",
       "address": "台北市中正區市集路1-1號"
     },
     "stalls": []
@@ -182,16 +182,12 @@ Request body 只需要 `applicationNo` 與 `stallNo`，`eventId` 由後端依申
       "eventId": 1,
       "eventTitle": "MD0101",
       "eventTime": "2026-09-01 11:00 - 2026-09-03 19:00",
-      "eventStartDate": "2026-09-01",
-      "eventEndDate": "2026-09-03",
-      "eventStartTime": "11:00:00",
-      "eventEndTime": "19:00:00",
       "applyDates": "2026-09-01,2026-09-02",
       "vendorName": "vendor1",
       "vendorOwnerName": "vendor1",
       "brandType": "餐飲",
       "appliedAt": "2026-07-01T14:00:00",
-      "applicationStatus": "報名成功"
+      "applicationStatus": "報名完成"
     }
   ]
 }
@@ -227,7 +223,9 @@ Request body 只需要 `applicationNo` 與 `stallNo`，`eventId` 由後端依申
     "event": {
       "eventId": 1,
       "eventTitle": "MD0101",
-      "eventTime": "2026-09-01 11:00:00 - 2026-09-03 19:00:00",
+      "eventTime": "2026-09-01 11:00 - 2026-09-03 19:00",
+      "eventStartAt": "2026-09-01T11:00:00",
+      "eventEndAt": "2026-09-03T19:00:00",
       "locationName": "市集廣場",
       "city": "台北市",
       "district": "中正區",

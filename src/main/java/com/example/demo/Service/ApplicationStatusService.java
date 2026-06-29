@@ -47,7 +47,7 @@ public class ApplicationStatusService {
         }
 
         if ("PAID".equals(paymentStatus)) {
-            if (isEventEnded(application.get("eventEndDate"))
+            if (isEventEnded(application.get("eventEndAt"))
                     && "RETURNED".equals(stringValue(application.get("depositStatus")))) {
                 return "保證金已退還";
             }
@@ -58,8 +58,8 @@ public class ApplicationStatusService {
     }
 
     private boolean isEventEnded(Object value) {
-        LocalDate eventEndDate = toLocalDate(value);
-        return eventEndDate != null && !eventEndDate.isAfter(LocalDate.now());
+        LocalDate eventEndDay = toLocalDate(value);
+        return eventEndDay != null && !eventEndDay.isAfter(LocalDate.now());
     }
 
     private LocalDate toLocalDate(Object value) {
