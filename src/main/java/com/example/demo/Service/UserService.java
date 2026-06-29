@@ -123,7 +123,7 @@ public class UserService {
             return ApiResponse.fail("Email is not verified");
         }
         if (!"ACTIVE".equals(userData.get().get("status"))) {
-            return ApiResponse.fail("Account is not active or isdeleted");
+            return ApiResponse.fail("Account is not active or disabled");
         }
         String role = userData.get().get("role").toString();
 

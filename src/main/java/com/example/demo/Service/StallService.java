@@ -103,6 +103,7 @@ public class StallService {
 
     public ApiResponse<List<EventStallStatusResponse>> getEventStallsStatus(Long eventId) {
         List<EventStallStatusResponse> stalls = stallRepository.findEventStallsStatus(eventId).stream()
+                .map(this::withDisplayBoothStatus)
                 .map(EventStallStatusResponse::new)
                 .toList();
         return ApiResponse.success("Event stalls status retrieved successfully", stalls);
@@ -200,7 +201,9 @@ public class StallService {
         }
 
         Long eventId = ((Number) applicationData.get("eventId")).longValue();
-        List<Map<String, Object>> stalls = stallRepository.findEventStallsMap(eventId);
+        List<Map<String, Object>> stalls = stallRepository.findEventStallsMap(eventId).stream()
+                .map(this::withDisplayBoothStatus)
+                .toList();
 
         Map<String, Object> application = new LinkedHashMap<>();
         application.put("applicationNo", applicationData.get("applicationNo"));
@@ -211,8 +214,8 @@ public class StallService {
 
         Map<String, Object> event = new LinkedHashMap<>();
         event.put("eventTitle", applicationData.get("eventTitle"));
-        event.put("startDate", applicationData.get("startDate"));
-        event.put("endDate", applicationData.get("endDate"));
+        event.put("startAt", applicationData.get("startAt"));
+        event.put("endAt", applicationData.get("endAt"));
         event.put("address", joinAddress(
                 applicationData.get("city"),
                 applicationData.get("district"),
@@ -223,6 +226,22 @@ public class StallService {
 
     private boolean canViewStallMap(String applicationStatus, Map<String, Object> applicationData) {
         return "待選位".equals(applicationStatus) || isSelectedStallApplication(applicationData);
+    }
+
+    private Map<String, Object> withDisplayBoothStatus(Map<String, Object> stall) {
+        Map<String, Object> response = new LinkedHashMap<>(stall);
+        response.put("status", displayBoothStatus(stall.get("status")));
+        return response;
+    }
+
+    private String displayBoothStatus(Object status) {
+        return switch (stringValue(status)) {
+            case "AVAILABLE" -> "可選擇";
+            case "SELECTED" -> "已選擇";
+            case "ASSIGNED", "SOLD" -> "系統分配";
+            case "DISABLED" -> "不可使用";
+            default -> normalizeText(status);
+        };
     }
 
     private boolean isSelectedStallApplication(Map<String, Object> applicationData) {
@@ -256,13 +275,17 @@ public class StallService {
     }
 
     private void appendIfPresent(StringBuilder builder, Object value) {
-        if (value == null) {
-            return;
-        }
-        String text = value.toString().trim();
+        String text = normalizeText(value);
         if (!text.isEmpty()) {
             builder.append(text);
         }
+    }
+
+    private String normalizeText(Object value) {
+        if (value == null) {
+            return "";
+        }
+        return value.toString().trim();
     }
 
     private boolean isTrue(Object value) {

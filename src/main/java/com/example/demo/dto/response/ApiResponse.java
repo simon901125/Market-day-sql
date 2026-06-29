@@ -145,7 +145,7 @@ public class ApiResponse<T> {
             case "Stall is not available" -> "攤位不可選擇";
             case "Stall has already been selected" -> "搶位失敗，該位置已被選擇";
             case "Stall selection failed" -> "攤位選擇失敗";
-            case "Account is not active", "Account is not active or isdeleted" -> "帳號未啟用或已停用";
+            case "Account is not active", "Account is not active or disabled" -> "帳號未啟用或已停用";
             case "Account role does not match token role" -> "帳號角色與 token 角色不一致";
             case "Account cannot be deactivated while vendor applications are still in progress" -> "仍有進行中的攤主申請，無法停用帳號";
             case "Account cannot be deactivated while organizer events are still in progress" -> "仍有進行中的主辦活動，無法停用帳號";

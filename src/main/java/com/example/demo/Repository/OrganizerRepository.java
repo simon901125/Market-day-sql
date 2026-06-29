@@ -1,5 +1,6 @@
 package com.example.demo.Repository;
 
+import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -46,7 +47,12 @@ public class OrganizerRepository {
         return RepositoryResultMapper.normalizeOptional(list.stream().findFirst());
     }
 
-    public List<Map<String, Object>> findOrganizerApplications(Long organizerUserId) {
+    public List<Map<String, Object>> findOrganizerApplications(
+            Long organizerUserId,
+            String eventTitle,
+            String brandName,
+            LocalDateTime appliedStartAt,
+            LocalDateTime appliedEndExclusive) {
         String sql = """
                 SELECT
                     a.id AS applicationId,
@@ -54,16 +60,12 @@ public class OrganizerRepository {
                     e.id AS eventId,
                     e.title AS eventTitle,
                     CONCAT(
-                        CONVERT(varchar(10), e.start_date, 23),
-                        CASE WHEN e.start_time IS NULL THEN N'' ELSE N' ' + CONVERT(varchar(5), e.start_time, 108) END,
+                        CONVERT(varchar(16), e.start_at, 120),
                         N' - ',
-                        CONVERT(varchar(10), e.end_date, 23),
-                        CASE WHEN e.end_time IS NULL THEN N'' ELSE N' ' + CONVERT(varchar(5), e.end_time, 108) END
+                        CONVERT(varchar(16), e.end_at, 120)
                     ) AS eventTime,
-                    e.start_date AS eventStartDate,
-                    e.end_date AS eventEndDate,
-                    e.start_time AS eventStartTime,
-                    e.end_time AS eventEndTime,
+                    e.start_at AS eventStartAt,
+                    e.end_at AS eventEndAt,
                     vendor_up.name AS vendorName,
                     vendor_user.name AS vendorOwnerName,
                     vp.brand_type AS brandType,
@@ -101,6 +103,10 @@ public class OrganizerRepository {
                 ) refund_data
                 WHERE e.user_id = :organizerUserId
                   AND e.publish_status = N'PUBLISHED'
+                  AND (:eventTitle IS NULL OR e.title LIKE N'%' + :eventTitle + N'%')
+                  AND (:brandName IS NULL OR vendor_up.name LIKE N'%' + :brandName + N'%')
+                  AND (:appliedStartAt IS NULL OR a.created_at >= :appliedStartAt)
+                  AND (:appliedEndExclusive IS NULL OR a.created_at < :appliedEndExclusive)
                 ORDER BY
                     a.created_at DESC,
                     a.id DESC
@@ -108,6 +114,10 @@ public class OrganizerRepository {
 
         Map<String, Object> map = new HashMap<>();
         map.put("organizerUserId", organizerUserId);
+        map.put("eventTitle", normalizeText(eventTitle));
+        map.put("brandName", normalizeText(brandName));
+        map.put("appliedStartAt", appliedStartAt);
+        map.put("appliedEndExclusive", appliedEndExclusive);
 
         return RepositoryResultMapper.normalizeList(namedParameterJdbcTemplate.queryForList(sql, map));
     }
@@ -125,10 +135,8 @@ public class OrganizerRepository {
                     e.city AS eventCity,
                     e.district AS eventDistrict,
                     e.address AS eventAddress,
-                    e.start_date AS eventStartDate,
-                    e.end_date AS eventEndDate,
-                    e.start_time AS eventStartTime,
-                    e.end_time AS eventEndTime,
+                    e.start_at AS eventStartAt,
+                    e.end_at AS eventEndAt,
                     e.base_fee AS baseFee,
                     e.cover_image_url AS eventCoverImageUrl,
                     vendor_user.id AS vendorUserId,
@@ -239,5 +247,13 @@ public class OrganizerRepository {
         map.put("applicationId", applicationId);
 
         return RepositoryResultMapper.normalizeOptional(namedParameterJdbcTemplate.queryForList(sql, map).stream().findFirst());
+    }
+
+    private String normalizeText(String value) {
+        if (value == null) {
+            return null;
+        }
+        String text = value.trim();
+        return text.isEmpty() ? null : text;
     }
 }
