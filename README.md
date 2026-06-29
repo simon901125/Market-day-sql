@@ -4,7 +4,11 @@ Market Day 後端 API 專案，使用 Spring Boot 建置，包含帳號註冊、
 
 ## 更新日誌
 
+> 更新日誌請依日期與 branch 分區：日期使用 `###`，branch 使用 `####`，避免不同分支的更動混在同一段。
+
 ### 2026-06-29
+
+#### simon branch
 
 - 選位 API 改為 `POST /api/stalls/select`，request body 只需 `applicationNo` 與 `stallNo`；後端會由 `applicationNo` 查出 `eventId`。
 - 選位流程改為先搶攤位狀態，再綁定申請單，避免多人同時選到同一攤位時出現競爭問題。
