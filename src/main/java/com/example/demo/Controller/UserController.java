@@ -10,7 +10,7 @@ import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.example.demo.Service.UserService;
-import com.example.demo.dto.ApiResponse;
+import com.example.demo.dto.response.ApiResponse;
 import com.example.demo.dto.request.EmailVerificationRequest;
 import com.example.demo.dto.request.GoogleCredentialRequest;
 import com.example.demo.dto.request.LocalLoginRequest;

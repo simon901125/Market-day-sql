@@ -1,4 +1,4 @@
-package com.example.demo.dto;
+package com.example.demo.dto.response;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
