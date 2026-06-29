@@ -15,13 +15,12 @@ public class StallRepository {
     @Autowired
     private NamedParameterJdbcTemplate namedParameterJdbcTemplate;
 
-    public Optional<Long> findAvailableStallId(Long eventId, String stallNo) {
+    public Optional<Long> findStallId(Long eventId, String stallNo) {
         String sql = """
                 SELECT id
                 FROM dbo.event_stalls
                 WHERE event_id = :eventId
                   AND stall_no = :stallNo
-                  AND status = N'AVAILABLE'
                 """;
 
         Map<String, Object> map = new HashMap<>();
@@ -32,7 +31,7 @@ public class StallRepository {
         return stallIds.stream().findFirst();
     }
 
-    public Optional<Map<String, Object>> findSelectableApplication(Long eventId, String applicationNo) {
+    public Optional<Map<String, Object>> findSelectableApplication(String applicationNo) {
         String sql = """
                 SELECT
                     id,
@@ -44,15 +43,13 @@ public class StallRepository {
                     review_status AS reviewStatus,
                     payment_status AS paymentStatus
                 FROM dbo.event_applications
-                WHERE event_id = :eventId
-                  AND application_no = :applicationNo
+                WHERE application_no = :applicationNo
                   AND review_status = N'APPROVED'
                   AND payment_status = N'PAID'
                   AND selected_stall_id IS NULL
                 """;
 
         Map<String, Object> map = new HashMap<>();
-        map.put("eventId", eventId);
         map.put("applicationNo", applicationNo);
 
         return RepositoryResultMapper.normalizeOptional(namedParameterJdbcTemplate.queryForList(sql, map).stream().findFirst());
@@ -132,17 +129,47 @@ public class StallRepository {
         String sql = """
                 SELECT
                     a.application_no AS applicationNo,
+                    a.user_id AS userId,
                     a.selected_stall_id AS selectedStallId,
+                    a.review_status AS reviewStatus,
+                    a.payment_status AS paymentStatus,
+                    a.deposit_status AS depositStatus,
+                    a.is_cancelled AS isCancelled,
+                    selected_stall.stall_no AS selectedStallNo,
+                    selected_stall.width AS selectedStallWidth,
+                    selected_stall.length AS selectedStallLength,
+                    selected_stall.height AS selectedStallHeight,
+                    selected_zone.zone_name AS selectedStallZoneName,
                     up.name AS vendorName,
                     e.id AS eventId,
                     e.title AS eventTitle,
+                    e.city,
+                    e.district,
                     e.address,
                     e.start_date AS startDate,
-                    e.end_date AS endDate
+                    e.end_date AS endDate,
+                    e.end_date AS eventEndDate,
+                    refund_data.refundStatus
                 FROM dbo.event_applications a
                 INNER JOIN dbo.vendor_profiles vp ON vp.id = a.vendor_profile_id
                 INNER JOIN dbo.user_profiles up ON up.id = vp.user_profile_id
                 INNER JOIN dbo.market_events e ON e.id = a.event_id
+                LEFT JOIN dbo.event_stalls selected_stall ON selected_stall.id = a.selected_stall_id
+                LEFT JOIN dbo.event_stall_zones selected_zone ON selected_zone.id = selected_stall.zone_id
+                OUTER APPLY (
+                    SELECT TOP 1 r.refund_status AS refundStatus
+                    FROM dbo.refunds r
+                    WHERE r.application_id = a.id
+                    ORDER BY
+                        CASE r.refund_status
+                            WHEN N'REFUNDED' THEN 1
+                            WHEN N'REFUNDING' THEN 2
+                            WHEN N'REFUND_REQUESTED' THEN 3
+                            WHEN N'REFUND_FAILED' THEN 4
+                            ELSE 5
+                        END,
+                        r.id DESC
+                ) refund_data
                 WHERE a.application_no = :applicationNo
                 """;
 

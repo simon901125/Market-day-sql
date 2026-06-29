@@ -6,6 +6,14 @@ Market Day 後端 API 專案，使用 Spring Boot 建置，包含帳號註冊、
 
 ### 2026-06-29
 
+- 選位 API 改為 `POST /api/stalls/select`，request body 只需 `applicationNo` 與 `stallNo`；後端會由 `applicationNo` 查出 `eventId`。
+- 選位流程改為先搶攤位狀態，再綁定申請單，避免多人同時選到同一攤位時出現競爭問題。
+- 選位 API 補上登入者必須為攤主，且申請單必須屬於目前登入攤主的檢查。
+- `GET /api/vendor/stall-map/{applicationNo}` 僅允許 `待選位` 或已成功選位的有效申請單查看地圖；已成功選位時回傳 `selectedStall` 供攤主確認。
+- `GET /api/vendor/stall-map/{applicationNo}` 的 `application` 回傳新增 `applicationStatus`。
+- 回傳 JSON 中 `address` 欄位統一組成 `city + district + address`。
+- `sql/test3.sql` 測資改為符合 request DTO：申請單號 `MD001` 到 `MD100`、攤位編號 `A01` 到 `A40`，資料量維持 20 攤主、2 主辦、10 活動、100 申請單。
+
 - `GET /api/organizer/applications/search` 目前會回傳登入中主辦方的全部申請資料，不接收 request body。
 - 保留 `GET /api/organizer/applications/{id}` 作為主辦方申請明細 API。
 - `LocalRegisterRequest.phone` 已改為選填；若有提供，仍需符合 `09xxxxxxxx` 格式。
@@ -161,7 +169,7 @@ POST /api/users/me
 POST /api/account/deactivate
 GET  /api/vendor/account
 GET  /api/vendor/stall-map/{applicationNo}
-POST /api/events/{eventId}/stalls/select
+POST /api/stalls/select
 GET  /api/organizer/account
 GET  /api/organizer/applications/search
 GET  /api/organizer/applications/{id}
@@ -196,10 +204,10 @@ GET  /api/organizer/applications/{id}
 
 | Method | API | Request DTO | JWT | 說明 |
 | --- | --- | --- | --- | --- |
-| POST | `/api/events/{eventId}/stalls/select` | `StallSelectionRequest` | 是 | 選擇活動攤位。 |
+| POST | `/api/stalls/select` | `StallSelectionRequest` | 是 | 依 `applicationNo` 與 `stallNo` 選位；後端自行查出活動並檢查攤主身分。 |
 | GET | `/api/events/{eventId}/stallsStatus` | - | 否 | 查詢活動攤位狀態。 |
 | GET | `/api/vendor/account` | - | 是 | 取得目前登入攤主資料。 |
-| GET | `/api/vendor/stall-map/{applicationNo}` | - | 是 | 查詢攤主申請對應的攤位圖資料。 |
+| GET | `/api/vendor/stall-map/{applicationNo}` | - | 是 | 查詢待選位或已成功選位申請單的攤位圖資料；已選位時回傳 `selectedStall`。 |
 
 ### 主辦方 API
 

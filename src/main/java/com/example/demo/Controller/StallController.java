@@ -29,12 +29,12 @@ public class StallController {
     @Autowired
     private StallService stallService;
 
-    @Operation(summary = "選擇活動攤位", description = "依 eventId 與攤位編號選位，只有 AVAILABLE 攤位可被選取。")
-    @PostMapping("/api/events/{eventId}/stalls/select")
+    @Operation(summary = "選擇活動攤位", description = "依 applicationNo 查出申請單與活動，再用 stallNo 選擇該活動的 AVAILABLE 攤位。")
+    @PostMapping("/api/stalls/select")
     public ApiResponse<StallSelectionResponse> selectEventStall(
-            @PathVariable Long eventId,
+            @RequestHeader(value = "Authorization", required = false) String authorizationHeader,
             @Valid @RequestBody StallSelectionRequest body) {
-        return stallService.selectEventStall(eventId, body);
+        return stallService.selectEventStall(authorizationHeader, body);
     }
 
     @Operation(summary = "取得活動攤位狀態", description = "依 eventId 取得該活動所有攤位目前狀態。")
@@ -52,7 +52,9 @@ public class StallController {
 
     @Operation(summary = "取得攤主選位地圖", description = "依 applicationNo 取得活動地圖、活動資訊與所有攤位狀態。")
     @GetMapping("/api/vendor/stall-map/{applicationNo}")
-    public ApiResponse<VendorStallMapResponse> getVendorStallMap(@PathVariable String applicationNo) {
-        return stallService.getVendorStallMap(applicationNo);
+    public ApiResponse<VendorStallMapResponse> getVendorStallMap(
+            @RequestHeader(value = "Authorization", required = false) String authorizationHeader,
+            @PathVariable String applicationNo) {
+        return stallService.getVendorStallMap(authorizationHeader, applicationNo);
     }
 }

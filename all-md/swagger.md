@@ -51,7 +51,7 @@ bearerAuth
 | --- | --- | --- |
 | Request DTO | `src/main/java/com/example/demo/dto/request` | 接收 request body。 |
 | Response DTO | `src/main/java/com/example/demo/dto/response` | 放入 `ApiResponse<T>.data`。 |
-| API wrapper | `src/main/java/com/example/demo/dto/ApiResponse.java` | 統一回傳 `statusCode`、`message`、`messageDetails`、`data`。 |
+| API wrapper | `src/main/java/com/example/demo/dto/response/ApiResponse.java` | 統一回傳 `statusCode`、`message`、`messageDetails`、`data`。 |
 
 Controller 應直接回傳 `ApiResponse<T>`，不再以 `Map<String, Object>` 作為正式 response。
 
@@ -177,7 +177,7 @@ Bearer <JWT_TOKEN>
 | POST | `/api/account/deactivate` |
 | GET | `/api/vendor/account` |
 | GET | `/api/vendor/stall-map/{applicationNo}` |
-| POST | `/api/events/{eventId}/stalls/select` |
+| POST | `/api/stalls/select` |
 | GET | `/api/organizer/account` |
 | GET | `/api/organizer/applications/search` |
 | GET | `/api/organizer/applications/{id}` |
@@ -213,10 +213,39 @@ Bearer <JWT_TOKEN>
 
 | Method | API | Request DTO | JWT | 說明 |
 | --- | --- | --- | --- | --- |
-| POST | `/api/events/{eventId}/stalls/select` | `StallSelectionRequest` | 是 | 選擇活動攤位。 |
+| POST | `/api/stalls/select` | `StallSelectionRequest` | 是 | 依 `applicationNo` 與 `stallNo` 選位；後端自行查出活動並檢查攤主身分。 |
 | GET | `/api/events/{eventId}/stallsStatus` | - | 否 | 查詢活動攤位狀態。 |
 | GET | `/api/vendor/account` | - | 是 | 取得目前登入攤主資料。 |
-| GET | `/api/vendor/stall-map/{applicationNo}` | - | 是 | 查詢攤主申請對應的攤位圖資料。 |
+| GET | `/api/vendor/stall-map/{applicationNo}` | - | 是 | 查詢待選位或已成功選位申請單的攤位圖；已選位時回傳 `selectedStall`。 |
+
+#### 攤位選位 API
+
+`POST /api/stalls/select`
+
+```json
+{
+  "applicationNo": "MD001",
+  "stallNo": "A01"
+}
+```
+
+- `eventId` 不由前端傳入，後端會由 `applicationNo` 查出申請單所屬活動。
+- 需要 JWT，且登入者必須是 `VENDOR`。
+- 申請單必須屬於目前登入攤主。
+- 申請單必須已審核通過、已付款、尚未選位。
+- 選位時會先把攤位從 `AVAILABLE` 更新為 `SELECTED`，搶位失敗會回 `搶位失敗，該位置已被選擇`。
+
+#### 攤位地圖 API
+
+`GET /api/vendor/stall-map/{applicationNo}`
+
+- 需要 JWT，且登入者必須是 `VENDOR`。
+- 申請單必須屬於目前登入攤主。
+- 可查看地圖的狀態：
+  - `待選位`：用於進入選位。
+  - 已付款且已有 `selectedStallId`：用於查看已成功選位的攤位資料。
+- 其他狀態會回 `此申請單目前不可查看攤位地圖`。
+- `application` 會回傳 `applicationStatus`；已選位時會回傳 `selectedStall`。
 
 ### 主辦方 API
 
