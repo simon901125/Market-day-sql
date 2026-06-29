@@ -61,7 +61,10 @@ public class OrganizerService {
         account.put("taxId", organizer.get("taxId"));
         account.put("city", organizer.get("city"));
         account.put("district", organizer.get("district"));
-        account.put("address", organizer.get("address"));
+        account.put("address", joinAddress(
+                organizer.get("city"),
+                organizer.get("district"),
+                organizer.get("address")));
         account.put("serviceDays", organizer.get("serviceDays"));
         account.put("serviceTime", formatServiceTime(
                 organizer.get("serviceStartTime"),
@@ -131,7 +134,10 @@ public class OrganizerService {
                 "locationName", application.get("locationName"),
                 "city", application.get("eventCity"),
                 "district", application.get("eventDistrict"),
-                "address", application.get("eventAddress"),
+                "address", joinAddress(
+                        application.get("eventCity"),
+                        application.get("eventDistrict"),
+                        application.get("eventAddress")),
                 "coverImageUrl", application.get("eventCoverImageUrl")));
 
         response.put("application", orderedMap(

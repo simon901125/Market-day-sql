@@ -31,7 +31,7 @@ Request body 使用 `dto/request` 內的 Request DTO，Response data 使用 `dto
 | --- | --- | --- |
 | Request DTO | `src/main/java/com/example/demo/dto/request` | 接收 request body，例如登入、註冊、驗證碼、重設密碼、攤位選擇。 |
 | Response DTO | `src/main/java/com/example/demo/dto/response` | API 成功時放入 `ApiResponse<T>.data` 的資料結構。 |
-| API wrapper | `src/main/java/com/example/demo/dto/ApiResponse.java` | 統一包裝 `statusCode`、`message`、`messageDetails`、`data`。 |
+| API wrapper | `src/main/java/com/example/demo/dto/response/ApiResponse.java` | 統一包裝 `statusCode`、`message`、`messageDetails`、`data`。 |
 
 目前常用 Response DTO 包含：
 
@@ -47,7 +47,7 @@ Request body 使用 `dto/request` 內的 Request DTO，Response data 使用 `dto
 | `OrganizerApplicationSummaryResponse` | `/api/organizer/applications/search` |
 | `OrganizerApplicationDetailResponse` | `/api/organizer/applications/{id}` |
 | `EventStallStatusResponse` | `/api/events/{eventId}/stallsStatus` |
-| `StallSelectionResponse` | `/api/events/{eventId}/stalls/select` |
+| `StallSelectionResponse` | `/api/stalls/select` |
 | `PasswordResetVerificationResponse` | `/api/auth/resetPassword/emailVerify` |
 
 ## 登入成功範例
@@ -69,6 +69,92 @@ Request body 使用 `dto/request` 內的 Request DTO，Response data 使用 `dto
       "emailVerified": true
     }
   }
+}
+```
+
+## 攤位選位 Response
+
+`POST /api/stalls/select`
+
+Request body 只需要 `applicationNo` 與 `stallNo`，`eventId` 由後端依申請單查出。
+
+```json
+{
+  "applicationNo": "MD001",
+  "stallNo": "A01"
+}
+```
+
+成功時 `data` 為 `StallSelectionResponse`：
+
+```json
+{
+  "statusCode": 200,
+  "message": "Stall selection successful",
+  "messageDetails": null,
+  "data": {
+    "applicationNo": "MD001",
+    "stallNo": "A01"
+  }
+}
+```
+
+並發搶位失敗時會回：
+
+```json
+{
+  "statusCode": 400,
+  "message": "搶位失敗，該位置已被選擇",
+  "messageDetails": null,
+  "data": null
+}
+```
+
+## 攤位地圖 Response
+
+`GET /api/vendor/stall-map/{applicationNo}`
+
+此 API 只允許目前登入攤主查詢自己的申請單，且申請單必須是 `待選位` 或已成功選位的有效狀態。已成功選位時可用來確認攤位資料。
+
+```json
+{
+  "statusCode": 200,
+  "message": "Vendor stall map retrieved successfully",
+  "messageDetails": null,
+  "data": {
+    "application": {
+      "applicationNo": "MD001",
+      "applicationStatus": "報名成功",
+      "vendorName": "vendor1 攤位",
+      "selectedStallId": 123,
+      "selectedStall": {
+        "selectedStallId": 123,
+        "stallNo": "A01",
+        "zoneName": "A",
+        "width": 3.00,
+        "length": 3.00,
+        "height": 2.50
+      }
+    },
+    "event": {
+      "eventTitle": "MD0101",
+      "startDate": "2026-09-01",
+      "endDate": "2026-09-03",
+      "address": "台北市中正區市集路1-1號"
+    },
+    "stalls": []
+  }
+}
+```
+
+若申請單尚未進入可查看地圖的狀態，會回：
+
+```json
+{
+  "statusCode": 400,
+  "message": "此申請單目前不可查看攤位地圖",
+  "messageDetails": null,
+  "data": null
 }
 ```
 

@@ -137,10 +137,13 @@ public class ApiResponse<T> {
             case "Application id is required" -> "申請 ID 為必填";
             case "Application number is required" -> "申請編號為必填";
             case "Application not found" -> "找不到申請資料";
+            case "Application does not belong to this account" -> "此申請單不屬於目前登入帳號";
+            case "Application is not selectable for stall map" -> "此申請單目前不可查看攤位地圖";
             case "Application is not approved, paid, or selectable" -> "申請尚未審核通過、尚未付款或不可選擇攤位";
             case "Application binding failed" -> "申請綁定攤位失敗";
             case "Stall number is required" -> "攤位編號為必填";
             case "Stall is not available" -> "攤位不可選擇";
+            case "Stall has already been selected" -> "搶位失敗，該位置已被選擇";
             case "Stall selection failed" -> "攤位選擇失敗";
             case "Account is not active", "Account is not active or isdeleted" -> "帳號未啟用或已停用";
             case "Account role does not match token role" -> "帳號角色與 token 角色不一致";
