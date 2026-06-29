@@ -31,7 +31,7 @@ CREATE TABLE dbo.users
     CONSTRAINT UQ_users_email UNIQUE (email),
     CONSTRAINT CK_users_role CHECK (role IN ('VENDOR', 'ORGANIZER', 'ADMIN')),
     CONSTRAINT CK_users_provider CHECK (provider IN ('LOCAL', 'GOOGLE')),
-    CONSTRAINT CK_users_status CHECK (status IN ('UNACTIVE', 'ACTIVE', 'IS_DELETED'))
+    CONSTRAINT CK_users_status CHECK (status IN ('UNACTIVE', 'ACTIVE', 'DISABLED', 'IS_DELETED'))
 );
 GO
 
@@ -227,10 +227,8 @@ CREATE TABLE dbo.market_events
     address NVARCHAR(255) NOT NULL,
     traffic_info NVARCHAR(MAX) NULL,
     notice NVARCHAR(MAX) NULL,
-    start_date DATE NOT NULL,
-    end_date DATE NOT NULL,
-    start_time TIME(0) NULL,
-    end_time TIME(0) NULL,
+    start_at DATETIME2(0) NOT NULL,
+    end_at DATETIME2(0) NOT NULL,
     registration_start_at DATETIME2(0) NOT NULL,
     registration_end_at DATETIME2(0) NOT NULL,
     max_booths INT NOT NULL,
@@ -238,24 +236,49 @@ CREATE TABLE dbo.market_events
     cover_image_url NVARCHAR(500) NULL,
     map_image_url NVARCHAR(500) NULL,
     public_info_at DATETIME2(0) NULL,
-    review_status NVARCHAR(30) NOT NULL CONSTRAINT DF_market_events_review_status DEFAULT N'REVISION_REQUIRED',
+    review_status NVARCHAR(30) NOT NULL CONSTRAINT DF_market_events_review_status DEFAULT N'PENDING',
     review_note NVARCHAR(MAX) NULL,
     publish_status NVARCHAR(30) NOT NULL CONSTRAINT DF_market_events_publish_status DEFAULT N'DRAFT',
     CONSTRAINT PK_market_events PRIMARY KEY (id),
     CONSTRAINT FK_market_events_users FOREIGN KEY (user_id) REFERENCES dbo.users(id),
     CONSTRAINT FK_market_events_categories FOREIGN KEY (category_id) REFERENCES dbo.categories(id),
-    CONSTRAINT CK_market_events_date_range CHECK (end_date >= start_date),
+    CONSTRAINT CK_market_events_date_range CHECK (end_at >= start_at),
     CONSTRAINT CK_market_events_registration_range CHECK (registration_end_at >= registration_start_at),
-    CONSTRAINT CK_market_events_review_status CHECK (review_status IN (N'APPROVED', N'REJECTED', N'REVISION_REQUIRED')),
-    CONSTRAINT CK_market_events_publish_status CHECK (publish_status IN (N'DRAFT', N'PUBLISHED', N'UNPUBLISHED', N'CANCELLED'))
+    CONSTRAINT CK_market_events_review_status CHECK (review_status IN (N'PENDING', N'APPROVED', N'REJECTED', N'REVISION_REQUIRED', N'MAP_BUILDING')),
+    CONSTRAINT CK_market_events_publish_status CHECK (publish_status IN (N'DRAFT', N'READY_TO_PUBLISH', N'PUBLISHED', N'BRANDS_PUBLISHED', N'UNPUBLISH_REQUESTED', N'UNPUBLISHED', N'CANCELLED'))
 );
 GO
 
 CREATE INDEX IX_market_events_user ON dbo.market_events(user_id);
-CREATE INDEX IX_market_events_dates ON dbo.market_events(start_date, end_date);
+CREATE INDEX IX_market_events_dates ON dbo.market_events(start_at, end_at);
 CREATE INDEX IX_market_events_city_category ON dbo.market_events(city, category_id);
 CREATE INDEX IX_market_events_review_status ON dbo.market_events(review_status);
 CREATE INDEX IX_market_events_publish_status ON dbo.market_events(publish_status);
+GO
+
+CREATE TABLE dbo.event_unpublish_requests
+(
+    id BIGINT IDENTITY(1,1) NOT NULL,
+    event_id BIGINT NOT NULL,
+    requested_by BIGINT NOT NULL,
+    reviewed_by BIGINT NULL,
+    reason NVARCHAR(MAX) NOT NULL,
+    status NVARCHAR(30) NOT NULL CONSTRAINT DF_event_unpublish_requests_status DEFAULT N'PENDING',
+    review_note NVARCHAR(MAX) NULL,
+    requested_at DATETIME2(0) NOT NULL CONSTRAINT DF_event_unpublish_requests_requested_at DEFAULT SYSDATETIME(),
+    reviewed_at DATETIME2(0) NULL,
+    CONSTRAINT PK_event_unpublish_requests PRIMARY KEY (id),
+    CONSTRAINT FK_event_unpublish_requests_market_events FOREIGN KEY (event_id) REFERENCES dbo.market_events(id),
+    CONSTRAINT FK_event_unpublish_requests_requested_by FOREIGN KEY (requested_by) REFERENCES dbo.users(id),
+    CONSTRAINT FK_event_unpublish_requests_reviewed_by FOREIGN KEY (reviewed_by) REFERENCES dbo.users(id),
+    CONSTRAINT CK_event_unpublish_requests_status CHECK (status IN (N'PENDING', N'APPROVED', N'REJECTED', N'CANCELLED'))
+);
+GO
+
+CREATE INDEX IX_event_unpublish_requests_event_status ON dbo.event_unpublish_requests(event_id, status);
+CREATE INDEX IX_event_unpublish_requests_requested_by ON dbo.event_unpublish_requests(requested_by);
+CREATE INDEX IX_event_unpublish_requests_reviewed_by ON dbo.event_unpublish_requests(reviewed_by);
+CREATE INDEX IX_event_unpublish_requests_requested_at ON dbo.event_unpublish_requests(requested_at);
 GO
 
 CREATE TABLE dbo.event_images
@@ -297,7 +320,7 @@ CREATE TABLE dbo.event_stalls
     CONSTRAINT UQ_event_stalls_event_stall_no UNIQUE (event_id, stall_no),
     CONSTRAINT FK_event_stalls_market_events FOREIGN KEY (event_id) REFERENCES dbo.market_events(id),
     CONSTRAINT FK_event_stalls_event_stall_zones FOREIGN KEY (zone_id) REFERENCES dbo.event_stall_zones(id),
-    CONSTRAINT CK_event_stalls_status CHECK (status IN (N'AVAILABLE', N'SELECTED', N'SOLD', N'DISABLED'))
+    CONSTRAINT CK_event_stalls_status CHECK (status IN (N'AVAILABLE', N'SELECTED', N'ASSIGNED', N'DISABLED'))
 );
 GO
 
@@ -410,12 +433,51 @@ CREATE TABLE dbo.notifications
     type NVARCHAR(50) NOT NULL,
     title NVARCHAR(150) NOT NULL,
     content NVARCHAR(MAX) NOT NULL,
+    is_read BIT NOT NULL CONSTRAINT DF_notifications_is_read DEFAULT 0,
+    read_at DATETIME2(0) NULL,
     CONSTRAINT PK_notifications PRIMARY KEY (id),
     CONSTRAINT FK_notifications_users FOREIGN KEY (user_id) REFERENCES dbo.users(id)
 );
 GO
 
 CREATE INDEX IX_notifications_user ON dbo.notifications(user_id);
+CREATE INDEX IX_notifications_user_is_read ON dbo.notifications(user_id, is_read);
+GO
+
+CREATE TABLE dbo.admin_operation_logs
+(
+    id BIGINT IDENTITY(1,1) NOT NULL,
+    admin_user_id BIGINT NOT NULL,
+    operation_type NVARCHAR(30) NOT NULL,
+    target_type NVARCHAR(30) NOT NULL,
+    target_id BIGINT NULL,
+    target_label NVARCHAR(200) NOT NULL,
+    action_content NVARCHAR(300) NOT NULL,
+    created_at DATETIME2(0) NOT NULL CONSTRAINT DF_admin_operation_logs_created_at DEFAULT SYSDATETIME(),
+    CONSTRAINT PK_admin_operation_logs PRIMARY KEY (id),
+    CONSTRAINT FK_admin_operation_logs_admin_user FOREIGN KEY (admin_user_id) REFERENCES dbo.users(id),
+    CONSTRAINT CK_admin_operation_logs_operation_type CHECK (operation_type IN (
+        N'ACTIVITY_REVIEW',
+        N'REQUEST_REVISION',
+        N'ACCOUNT_DISABLED',
+        N'ACCOUNT_RESTORED',
+        N'EVENT_UNPUBLISH_REVIEW',
+        N'MAP_BUILD_COMPLETED',
+        N'SYSTEM_SETTING'
+    )),
+    CONSTRAINT CK_admin_operation_logs_target_type CHECK (target_type IN (
+        N'USER',
+        N'MARKET_EVENT',
+        N'EVENT_UNPUBLISH_REQUEST',
+        N'SYSTEM_SETTING'
+    ))
+);
+GO
+
+CREATE INDEX IX_admin_operation_logs_created ON dbo.admin_operation_logs(created_at);
+CREATE INDEX IX_admin_operation_logs_type_created ON dbo.admin_operation_logs(operation_type, created_at);
+CREATE INDEX IX_admin_operation_logs_admin_created ON dbo.admin_operation_logs(admin_user_id, created_at);
+CREATE INDEX IX_admin_operation_logs_target ON dbo.admin_operation_logs(target_type, target_id);
 GO
 
 CREATE TABLE dbo.request_logs
@@ -516,7 +578,7 @@ EXEC dbo.usp_add_column_description N'users', N'email', N'登入 Email';
 EXEC dbo.usp_add_column_description N'users', N'password_hash', N'密碼雜湊值（LOCAL）';
 EXEC dbo.usp_add_column_description N'users', N'phone', N'聯絡電話';
 EXEC dbo.usp_add_column_description N'users', N'provider', N'登入來源（LOCAL/GOOGLE）';
-EXEC dbo.usp_add_column_description N'users', N'status', N'帳號狀態（UNACTIVE/ACTIVE/IS_DELETED）';
+EXEC dbo.usp_add_column_description N'users', N'status', N'帳號狀態（UNACTIVE/ACTIVE/DISABLED/IS_DELETED）';
 EXEC dbo.usp_add_column_description N'users', N'isLogin', N'是否已有登入中的裝置';
 EXEC dbo.usp_add_column_description N'users', N'email_verified_at', N'Email 驗證完成時間';
 EXEC dbo.usp_add_column_description N'users', N'created_at', N'建立時間';
@@ -589,10 +651,8 @@ EXEC dbo.usp_add_column_description N'market_events', N'district', N'區域';
 EXEC dbo.usp_add_column_description N'market_events', N'address', N'地址';
 EXEC dbo.usp_add_column_description N'market_events', N'traffic_info', N'交通方式';
 EXEC dbo.usp_add_column_description N'market_events', N'notice', N'活動注意事項';
-EXEC dbo.usp_add_column_description N'market_events', N'start_date', N'活動開始日';
-EXEC dbo.usp_add_column_description N'market_events', N'end_date', N'活動結束日';
-EXEC dbo.usp_add_column_description N'market_events', N'start_time', N'每日開始時間';
-EXEC dbo.usp_add_column_description N'market_events', N'end_time', N'每日結束時間';
+EXEC dbo.usp_add_column_description N'market_events', N'start_at', N'活動開始日期時間';
+EXEC dbo.usp_add_column_description N'market_events', N'end_at', N'活動結束日期時間';
 EXEC dbo.usp_add_column_description N'market_events', N'registration_start_at', N'報名開始時間';
 EXEC dbo.usp_add_column_description N'market_events', N'registration_end_at', N'報名截止時間';
 EXEC dbo.usp_add_column_description N'market_events', N'max_booths', N'攤位總數';
@@ -600,9 +660,19 @@ EXEC dbo.usp_add_column_description N'market_events', N'base_fee', N'基本攤�
 EXEC dbo.usp_add_column_description N'market_events', N'cover_image_url', N'活動封面';
 EXEC dbo.usp_add_column_description N'market_events', N'map_image_url', N'攤位地圖底圖';
 EXEC dbo.usp_add_column_description N'market_events', N'public_info_at', N'公開資訊時間';
-EXEC dbo.usp_add_column_description N'market_events', N'review_status', N'活動審核狀態（APPROVED/REJECTED/REVISION_REQUIRED/CANCELLED）';
+EXEC dbo.usp_add_column_description N'market_events', N'review_status', N'活動審核狀態（PENDING/APPROVED/REJECTED/REVISION_REQUIRED/MAP_BUILDING）';
 EXEC dbo.usp_add_column_description N'market_events', N'review_note', N'補件原因 / 審核備註';
-EXEC dbo.usp_add_column_description N'market_events', N'publish_status', N'活動發布狀態（DRAFT/PUBLISHED/UNPUBLISHED/CANCELLED）';
+EXEC dbo.usp_add_column_description N'market_events', N'publish_status', N'活動發布狀態（DRAFT/READY_TO_PUBLISH/PUBLISHED/BRANDS_PUBLISHED/UNPUBLISH_REQUESTED/UNPUBLISHED/CANCELLED）';
+
+EXEC dbo.usp_add_column_description N'event_unpublish_requests', N'id', N'活動下架申請 ID';
+EXEC dbo.usp_add_column_description N'event_unpublish_requests', N'event_id', N'活動 ID';
+EXEC dbo.usp_add_column_description N'event_unpublish_requests', N'requested_by', N'提出下架申請的主辦方使用者 ID';
+EXEC dbo.usp_add_column_description N'event_unpublish_requests', N'reviewed_by', N'審核下架申請的管理員使用者 ID';
+EXEC dbo.usp_add_column_description N'event_unpublish_requests', N'reason', N'下架申請原因';
+EXEC dbo.usp_add_column_description N'event_unpublish_requests', N'status', N'下架申請狀態（PENDING/APPROVED/REJECTED/CANCELLED）';
+EXEC dbo.usp_add_column_description N'event_unpublish_requests', N'review_note', N'管理員審核備註';
+EXEC dbo.usp_add_column_description N'event_unpublish_requests', N'requested_at', N'下架申請時間';
+EXEC dbo.usp_add_column_description N'event_unpublish_requests', N'reviewed_at', N'下架審核時間';
 
 EXEC dbo.usp_add_column_description N'event_images', N'id', N'圖片 ID';
 EXEC dbo.usp_add_column_description N'event_images', N'event_id', N'活動 ID';
@@ -620,7 +690,7 @@ EXEC dbo.usp_add_column_description N'event_stalls', N'stall_no', N'攤位編號
 EXEC dbo.usp_add_column_description N'event_stalls', N'width', N'攤位寬度';
 EXEC dbo.usp_add_column_description N'event_stalls', N'length', N'攤位長度';
 EXEC dbo.usp_add_column_description N'event_stalls', N'height', N'攤位高度';
-EXEC dbo.usp_add_column_description N'event_stalls', N'status', N'攤位狀態（AVAILABLE/SELECTED/SOLD/DISABLED）';
+EXEC dbo.usp_add_column_description N'event_stalls', N'status', N'攤位狀態（AVAILABLE/SELECTED/ASSIGNED/DISABLED）';
 
 EXEC dbo.usp_add_column_description N'event_applications', N'id', N'報名 ID';
 EXEC dbo.usp_add_column_description N'event_applications', N'application_no', N'報名編號';
@@ -667,6 +737,17 @@ EXEC dbo.usp_add_column_description N'notifications', N'user_id', N'接收者';
 EXEC dbo.usp_add_column_description N'notifications', N'type', N'通知類型';
 EXEC dbo.usp_add_column_description N'notifications', N'title', N'通知標題';
 EXEC dbo.usp_add_column_description N'notifications', N'content', N'通知內容';
+EXEC dbo.usp_add_column_description N'notifications', N'is_read', N'是否已讀';
+EXEC dbo.usp_add_column_description N'notifications', N'read_at', N'閱讀時間';
+
+EXEC dbo.usp_add_column_description N'admin_operation_logs', N'id', N'管理員操作紀錄 ID';
+EXEC dbo.usp_add_column_description N'admin_operation_logs', N'admin_user_id', N'執行操作的管理員使用者 ID';
+EXEC dbo.usp_add_column_description N'admin_operation_logs', N'operation_type', N'操作類型（ACTIVITY_REVIEW/REQUEST_REVISION/ACCOUNT_DISABLED/ACCOUNT_RESTORED/EVENT_UNPUBLISH_REVIEW/MAP_BUILD_COMPLETED/SYSTEM_SETTING）';
+EXEC dbo.usp_add_column_description N'admin_operation_logs', N'target_type', N'操作對象類型（USER/MARKET_EVENT/EVENT_UNPUBLISH_REQUEST/SYSTEM_SETTING）';
+EXEC dbo.usp_add_column_description N'admin_operation_logs', N'target_id', N'操作對象 ID';
+EXEC dbo.usp_add_column_description N'admin_operation_logs', N'target_label', N'操作對象顯示名稱快照';
+EXEC dbo.usp_add_column_description N'admin_operation_logs', N'action_content', N'操作內容顯示文字';
+EXEC dbo.usp_add_column_description N'admin_operation_logs', N'created_at', N'操作時間';
 
 EXEC dbo.usp_add_column_description N'request_logs', N'id', N'請求紀錄 ID';
 EXEC dbo.usp_add_column_description N'request_logs', N'user_id', N'發送請求者';
