@@ -11,7 +11,7 @@ import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.example.demo.Service.StallService;
-import com.example.demo.dto.ApiResponse;
+import com.example.demo.dto.response.ApiResponse;
 import com.example.demo.dto.request.StallSelectionRequest;
 import com.example.demo.dto.response.EventStallStatusResponse;
 import com.example.demo.dto.response.StallSelectionResponse;

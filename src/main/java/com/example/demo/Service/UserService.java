@@ -18,7 +18,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.example.demo.Repository.UserRepository;
-import com.example.demo.dto.ApiResponse;
+import com.example.demo.dto.response.ApiResponse;
 import com.example.demo.dto.request.EmailVerificationRequest;
 import com.example.demo.dto.request.GoogleCredentialRequest;
 import com.example.demo.dto.request.LocalLoginRequest;

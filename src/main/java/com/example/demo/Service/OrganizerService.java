@@ -13,7 +13,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import com.example.demo.Repository.OrganizerRepository;
-import com.example.demo.dto.ApiResponse;
+import com.example.demo.dto.response.ApiResponse;
 import com.example.demo.dto.response.OrganizerAccountResponse;
 import com.example.demo.dto.response.OrganizerApplicationDetailResponse;
 import com.example.demo.dto.response.OrganizerApplicationSummaryResponse;

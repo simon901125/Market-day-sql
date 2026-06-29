@@ -10,7 +10,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.interceptor.TransactionAspectSupport;
 
 import com.example.demo.Repository.StallRepository;
-import com.example.demo.dto.ApiResponse;
+import com.example.demo.dto.response.ApiResponse;
 import com.example.demo.dto.request.StallSelectionRequest;
 import com.example.demo.dto.response.EventStallStatusResponse;
 import com.example.demo.dto.response.StallSelectionResponse;
