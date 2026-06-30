@@ -328,6 +328,26 @@ CREATE INDEX IX_event_stalls_event_status ON dbo.event_stalls(event_id, status);
 CREATE INDEX IX_event_stalls_zone ON dbo.event_stalls(zone_id);
 GO
 
+CREATE TABLE dbo.event_equipments
+(
+    id BIGINT IDENTITY(1,1) NOT NULL,
+    event_id BIGINT NOT NULL,
+    name NVARCHAR(100) NOT NULL,
+    rental_fee DECIMAL(10,2) NOT NULL,
+    pricing_unit NVARCHAR(20) NOT NULL,
+    description NVARCHAR(1000) NULL,
+    stock_quantity INT NULL,
+    CONSTRAINT PK_event_equipments PRIMARY KEY (id),
+    CONSTRAINT FK_event_equipments_market_events FOREIGN KEY (event_id) REFERENCES dbo.market_events(id),
+    CONSTRAINT CK_event_equipments_pricing_unit CHECK (pricing_unit IN (N'HOUR', N'DAY')),
+    CONSTRAINT CK_event_equipments_rental_fee CHECK (rental_fee >= 0),
+    CONSTRAINT CK_event_equipments_stock_quantity CHECK (stock_quantity IS NULL OR stock_quantity >= 0)
+);
+GO
+
+CREATE INDEX IX_event_equipments_event ON dbo.event_equipments(event_id);
+GO
+
 CREATE TABLE dbo.event_applications
 (
     id BIGINT IDENTITY(1,1) NOT NULL,
@@ -366,6 +386,32 @@ CREATE INDEX IX_event_applications_selected_stall ON dbo.event_applications(sele
 CREATE INDEX IX_event_applications_payment_due ON dbo.event_applications(payment_status, payment_due_at);
 CREATE INDEX IX_event_applications_cancelled ON dbo.event_applications(is_cancelled);
 CREATE INDEX IX_event_applications_created ON dbo.event_applications(created_at);
+GO
+
+CREATE TABLE dbo.equipment_rentals
+(
+    id BIGINT IDENTITY(1,1) NOT NULL,
+    application_id BIGINT NOT NULL,
+    event_equipment_id BIGINT NOT NULL,
+    equipment_name NVARCHAR(100) NOT NULL,
+    rental_fee DECIMAL(10,2) NOT NULL,
+    pricing_unit NVARCHAR(20) NOT NULL,
+    quantity INT NOT NULL,
+    rental_units INT NOT NULL,
+    subtotal DECIMAL(10,2) NOT NULL,
+    CONSTRAINT PK_equipment_rentals PRIMARY KEY (id),
+    CONSTRAINT FK_equipment_rentals_event_applications FOREIGN KEY (application_id) REFERENCES dbo.event_applications(id),
+    CONSTRAINT FK_equipment_rentals_event_equipments FOREIGN KEY (event_equipment_id) REFERENCES dbo.event_equipments(id),
+    CONSTRAINT CK_equipment_rentals_pricing_unit CHECK (pricing_unit IN (N'HOUR', N'DAY')),
+    CONSTRAINT CK_equipment_rentals_rental_fee CHECK (rental_fee >= 0),
+    CONSTRAINT CK_equipment_rentals_quantity CHECK (quantity > 0),
+    CONSTRAINT CK_equipment_rentals_rental_units CHECK (rental_units > 0),
+    CONSTRAINT CK_equipment_rentals_subtotal CHECK (subtotal >= 0)
+);
+GO
+
+CREATE INDEX IX_equipment_rentals_application ON dbo.equipment_rentals(application_id);
+CREATE INDEX IX_equipment_rentals_event_equipment ON dbo.equipment_rentals(event_equipment_id);
 GO
 
 CREATE TABLE dbo.application_dates
@@ -495,6 +541,24 @@ GO
 
 CREATE INDEX IX_request_logs_user_created ON dbo.request_logs(user_id, created_at);
 CREATE INDEX IX_request_logs_path_created ON dbo.request_logs(path, created_at);
+GO
+
+CREATE TABLE dbo.status_logs
+(
+    id BIGINT IDENTITY(1,1) NOT NULL,
+    request_log_id BIGINT NOT NULL,
+    target_type NVARCHAR(100) NOT NULL,
+    target_id BIGINT NOT NULL,
+    status_field NVARCHAR(100) NOT NULL,
+    new_status NVARCHAR(100) NOT NULL,
+    CONSTRAINT PK_status_logs PRIMARY KEY (id),
+    CONSTRAINT FK_status_logs_request_logs FOREIGN KEY (request_log_id) REFERENCES dbo.request_logs(id)
+);
+GO
+
+CREATE INDEX IX_status_logs_request_log ON dbo.status_logs(request_log_id);
+CREATE INDEX IX_status_logs_target ON dbo.status_logs(target_type, target_id);
+CREATE INDEX IX_status_logs_field ON dbo.status_logs(status_field);
 GO
 
 /* =========================================================
@@ -692,6 +756,14 @@ EXEC dbo.usp_add_column_description N'event_stalls', N'length', N'攤位長度';
 EXEC dbo.usp_add_column_description N'event_stalls', N'height', N'攤位高度';
 EXEC dbo.usp_add_column_description N'event_stalls', N'status', N'攤位狀態（AVAILABLE/SELECTED/ASSIGNED/DISABLED）';
 
+EXEC dbo.usp_add_column_description N'event_equipments', N'id', N'活動設備 ID';
+EXEC dbo.usp_add_column_description N'event_equipments', N'event_id', N'活動 ID';
+EXEC dbo.usp_add_column_description N'event_equipments', N'name', N'設備名稱';
+EXEC dbo.usp_add_column_description N'event_equipments', N'rental_fee', N'租金';
+EXEC dbo.usp_add_column_description N'event_equipments', N'pricing_unit', N'計費方式：HOUR/DAY';
+EXEC dbo.usp_add_column_description N'event_equipments', N'description', N'設備詳細資訊';
+EXEC dbo.usp_add_column_description N'event_equipments', N'stock_quantity', N'可租借數量';
+
 EXEC dbo.usp_add_column_description N'event_applications', N'id', N'報名 ID';
 EXEC dbo.usp_add_column_description N'event_applications', N'application_no', N'報名編號';
 EXEC dbo.usp_add_column_description N'event_applications', N'event_id', N'活動 ID';
@@ -709,6 +781,16 @@ EXEC dbo.usp_add_column_description N'event_applications', N'review_note', N'報
 EXEC dbo.usp_add_column_description N'event_applications', N'payment_status', N'報名付款狀態（PENDING/PAID/FAILED/EXPIRED）';
 EXEC dbo.usp_add_column_description N'event_applications', N'is_cancelled', N'報名是否取消';
 EXEC dbo.usp_add_column_description N'event_applications', N'created_at', N'報名建立時間';
+
+EXEC dbo.usp_add_column_description N'equipment_rentals', N'id', N'設備租借 ID';
+EXEC dbo.usp_add_column_description N'equipment_rentals', N'application_id', N'報名 ID';
+EXEC dbo.usp_add_column_description N'equipment_rentals', N'event_equipment_id', N'活動設備 ID';
+EXEC dbo.usp_add_column_description N'equipment_rentals', N'equipment_name', N'租借時設備名稱';
+EXEC dbo.usp_add_column_description N'equipment_rentals', N'rental_fee', N'租借時單價';
+EXEC dbo.usp_add_column_description N'equipment_rentals', N'pricing_unit', N'租借時計費方式：HOUR/DAY';
+EXEC dbo.usp_add_column_description N'equipment_rentals', N'quantity', N'租借數量';
+EXEC dbo.usp_add_column_description N'equipment_rentals', N'rental_units', N'計費單位數';
+EXEC dbo.usp_add_column_description N'equipment_rentals', N'subtotal', N'租借小計';
 
 EXEC dbo.usp_add_column_description N'application_dates', N'id', N'ID';
 EXEC dbo.usp_add_column_description N'application_dates', N'application_id', N'報名 ID';
@@ -755,6 +837,14 @@ EXEC dbo.usp_add_column_description N'request_logs', N'method', N'HTTP 方法';
 EXEC dbo.usp_add_column_description N'request_logs', N'path', N'API 路徑';
 EXEC dbo.usp_add_column_description N'request_logs', N'status_code', N'回應狀態碼';
 EXEC dbo.usp_add_column_description N'request_logs', N'created_at', N'建立時間';
+
+EXEC dbo.usp_add_column_description N'status_logs', N'id', N'狀態紀錄 ID';
+EXEC dbo.usp_add_column_description N'status_logs', N'request_log_id', N'對應的 API 請求紀錄 ID';
+EXEC dbo.usp_add_column_description N'status_logs', N'target_type', N'狀態來源類型，例如 APPLICATION/PAYMENT/REFUND/STALL/USER/EVENT';
+EXEC dbo.usp_add_column_description N'status_logs', N'target_id', N'狀態來源資料 ID';
+EXEC dbo.usp_add_column_description N'status_logs', N'status_field', N'狀態欄位名稱';
+EXEC dbo.usp_add_column_description N'status_logs', N'new_status', N'更新後狀態值';
+
 GO
 
 DROP PROCEDURE dbo.usp_add_column_description;
