@@ -10,6 +10,9 @@
 
 #### simon branch
 
+- `event_equipments` 新增 `wattage_limit`，用來記錄電力設備的瓦數上限。
+- 新增 `rental_appliances`，關聯 `equipment_rentals`，記錄 `equipment_rental_id`、`appliance_name`、`wattage`，用來保存租借電力時填寫的電器與瓦數。
+- `clear.sql`、`test3.sql` 同步租借電器瓦數資料，測試資料中的 `現場電源` 會建立 1000W 上限與電器明細。
 - `MarketDayDB.sql` 新增 `event_equipments`，記錄活動可租借設備、租金、計費方式、詳細資訊與庫存數量。
 - `MarketDayDB.sql` 新增 `equipment_rentals`，記錄報名租借設備，並保留租借當下的設備名稱、單價、計費方式、數量與小計。
 - `MarketDayDB.sql` 新增 `status_logs`，透過 `request_log_id` 關聯 API 請求並記錄狀態來源與更新後狀態。
