@@ -337,11 +337,13 @@ CREATE TABLE dbo.event_equipments
     pricing_unit NVARCHAR(20) NOT NULL,
     description NVARCHAR(1000) NULL,
     stock_quantity INT NULL,
+    wattage_limit INT NULL,
     CONSTRAINT PK_event_equipments PRIMARY KEY (id),
     CONSTRAINT FK_event_equipments_market_events FOREIGN KEY (event_id) REFERENCES dbo.market_events(id),
     CONSTRAINT CK_event_equipments_pricing_unit CHECK (pricing_unit IN (N'HOUR', N'DAY')),
     CONSTRAINT CK_event_equipments_rental_fee CHECK (rental_fee >= 0),
-    CONSTRAINT CK_event_equipments_stock_quantity CHECK (stock_quantity IS NULL OR stock_quantity >= 0)
+    CONSTRAINT CK_event_equipments_stock_quantity CHECK (stock_quantity IS NULL OR stock_quantity >= 0),
+    CONSTRAINT CK_event_equipments_wattage_limit CHECK (wattage_limit IS NULL OR wattage_limit > 0)
 );
 GO
 
@@ -412,6 +414,21 @@ GO
 
 CREATE INDEX IX_equipment_rentals_application ON dbo.equipment_rentals(application_id);
 CREATE INDEX IX_equipment_rentals_event_equipment ON dbo.equipment_rentals(event_equipment_id);
+GO
+
+CREATE TABLE dbo.rental_appliances
+(
+    id BIGINT IDENTITY(1,1) NOT NULL,
+    equipment_rental_id BIGINT NOT NULL,
+    appliance_name NVARCHAR(100) NOT NULL,
+    wattage INT NOT NULL,
+    CONSTRAINT PK_rental_appliances PRIMARY KEY (id),
+    CONSTRAINT FK_rental_appliances_equipment_rentals FOREIGN KEY (equipment_rental_id) REFERENCES dbo.equipment_rentals(id),
+    CONSTRAINT CK_rental_appliances_wattage CHECK (wattage > 0)
+);
+GO
+
+CREATE INDEX IX_rental_appliances_equipment_rental ON dbo.rental_appliances(equipment_rental_id);
 GO
 
 CREATE TABLE dbo.application_dates
@@ -763,6 +780,7 @@ EXEC dbo.usp_add_column_description N'event_equipments', N'rental_fee', N'租金
 EXEC dbo.usp_add_column_description N'event_equipments', N'pricing_unit', N'計費方式：HOUR/DAY';
 EXEC dbo.usp_add_column_description N'event_equipments', N'description', N'設備詳細資訊';
 EXEC dbo.usp_add_column_description N'event_equipments', N'stock_quantity', N'可租借數量';
+EXEC dbo.usp_add_column_description N'event_equipments', N'wattage_limit', N'電力設備瓦數上限';
 
 EXEC dbo.usp_add_column_description N'event_applications', N'id', N'報名 ID';
 EXEC dbo.usp_add_column_description N'event_applications', N'application_no', N'報名編號';
@@ -791,6 +809,11 @@ EXEC dbo.usp_add_column_description N'equipment_rentals', N'pricing_unit', N'租
 EXEC dbo.usp_add_column_description N'equipment_rentals', N'quantity', N'租借數量';
 EXEC dbo.usp_add_column_description N'equipment_rentals', N'rental_units', N'計費單位數';
 EXEC dbo.usp_add_column_description N'equipment_rentals', N'subtotal', N'租借小計';
+
+EXEC dbo.usp_add_column_description N'rental_appliances', N'id', N'租借電器 ID';
+EXEC dbo.usp_add_column_description N'rental_appliances', N'equipment_rental_id', N'設備租借 ID';
+EXEC dbo.usp_add_column_description N'rental_appliances', N'appliance_name', N'電器名稱';
+EXEC dbo.usp_add_column_description N'rental_appliances', N'wattage', N'電器瓦數';
 
 EXEC dbo.usp_add_column_description N'application_dates', N'id', N'ID';
 EXEC dbo.usp_add_column_description N'application_dates', N'application_id', N'報名 ID';
