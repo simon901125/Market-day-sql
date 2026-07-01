@@ -32,11 +32,11 @@ public class ApiResponse<T> {
     }
 
     public static <T> ApiResponse<T> success(String message, T data) {
-        return new ApiResponse<>(true, message, data);
+        return new ApiResponse<>(true, toChineseSuccessMessage(message), data);
     }
 
     public static ApiResponse<Void> success(String message) {
-        return new ApiResponse<>(true, message, null);
+        return new ApiResponse<>(true, toChineseSuccessMessage(message), null);
     }
 
     public static <T> ApiResponse<T> fail(String message) {
@@ -63,7 +63,9 @@ public class ApiResponse<T> {
             int statusCode = statusCodeFromMessage(message);
             return new ApiResponse<>(
                     statusCode,
-                    statusCode >= 200 && statusCode < 300 ? message : toChineseErrorMessage(message),
+                    statusCode >= 200 && statusCode < 300
+                            ? toChineseSuccessMessage(message)
+                            : toChineseErrorMessage(message),
                     dataValue);
         }
 
@@ -71,11 +73,13 @@ public class ApiResponse<T> {
             int statusCode = statusCodeFromMessage(message);
             return new ApiResponse<>(
                     statusCode,
-                    statusCode >= 200 && statusCode < 300 ? message : toChineseErrorMessage(message),
+                    statusCode >= 200 && statusCode < 300
+                            ? toChineseSuccessMessage(message)
+                            : toChineseErrorMessage(message),
                     null);
         }
 
-        return new ApiResponse<>(200, defaultSuccessMessage, legacyResponse);
+        return new ApiResponse<>(200, toChineseSuccessMessage(defaultSuccessMessage), legacyResponse);
     }
 
     private static int statusCodeFromMessage(String message) {
@@ -104,63 +108,97 @@ public class ApiResponse<T> {
                 || normalized.contains("mismatch"));
     }
 
-    private static String toChineseErrorMessage(String message) {
+    private static String toChineseSuccessMessage(String message) {
         if (message == null || message.isBlank()) {
-            return "操作失敗";
+            return "\u64cd\u4f5c\u6210\u529f";
         }
 
         return switch (message) {
-            case "Admin accounts must be created by the system" -> "管理員帳號只能由系統建立";
-            case "Admin accounts do not support Google registration" -> "管理員帳號不支援 Google 註冊";
-            case "Admin accounts do not support Google login" -> "管理員帳號不支援 Google 登入";
-            case "Email already registered" -> "此 Email 已被註冊";
-            case "Email already verified" -> "此 Email 已完成驗證";
-            case "Email is required" -> "Email 為必填";
-            case "Email is not verified" -> "Email 尚未完成驗證";
-            case "Google account has already register" -> "此 Google 帳號已被註冊";
-            case "Google account is not registered" -> "此 Google 帳號尚未註冊";
-            case "Google credential is required" -> "Google 憑證為必填";
-            case "Invalid Google credential" -> "Google 憑證無效";
-            case "Google client id does not match" -> "Google client id 不符合";
-            case "Google email is not verified" -> "Google Email 尚未完成驗證";
-            case "Invalid email or password" -> "Email 或密碼錯誤";
-            case "Invalid or expired token" -> "Token 無效或已過期";
-            case "Invalid or expired verification code" -> "驗證碼無效或已過期";
-            case "Invalid or expired reset token" -> "重設密碼 token 無效或已過期";
-            case "Authorization token is required" -> "請提供授權 token";
-            case "Session expired" -> "登入狀態已過期，請重新登入";
-            case "User not found" -> "找不到使用者";
-            case "Organizer profile not found" -> "找不到主辦方資料";
-            case "Vendor profile not found" -> "找不到攤主資料";
-            case "This account is not an organizer" -> "此帳號不是主辦方帳號";
-            case "This account is not a vendor" -> "此帳號不是攤主帳號";
-            case "Application id is required" -> "申請 ID 為必填";
-            case "Application number is required" -> "申請編號為必填";
-            case "Application not found" -> "找不到申請資料";
-            case "Application does not belong to this account" -> "此申請單不屬於目前登入帳號";
-            case "Application is not selectable for stall map" -> "此申請單目前不可查看攤位地圖";
-            case "Application is not approved, paid, or selectable" -> "申請尚未審核通過、尚未付款或不可選擇攤位";
-            case "Application binding failed" -> "申請綁定攤位失敗";
-            case "Stall number is required" -> "攤位編號為必填";
-            case "Stall is not available" -> "攤位不可選擇";
-            case "Stall has already been selected" -> "搶位失敗，該位置已被選擇";
-            case "Stall selection failed" -> "攤位選擇失敗";
-            case "Account is not active", "Account is not active or disabled" -> "帳號未啟用或已停用";
-            case "Account role does not match token role" -> "帳號角色與 token 角色不一致";
-            case "Account cannot be deactivated while vendor applications are still in progress" -> "仍有進行中的攤主申請，無法停用帳號";
-            case "Account cannot be deactivated while organizer events are still in progress" -> "仍有進行中的主辦活動，無法停用帳號";
-            case "This account role cannot be deactivated from this API" -> "此帳號角色無法透過此 API 停用";
-            case "Account deactivation failed" -> "帳號停用失敗";
-            case "This account cannot login from this portal" -> "此帳號不能從此入口登入";
-            case "Login status update failed" -> "登入狀態更新失敗";
-            case "Reset token is required" -> "重設密碼 token 為必填";
-            case "Password is required" -> "密碼為必填";
-            case "Password reset failed" -> "密碼重設失敗";
-            case "6-digit verification code is required" -> "請輸入 6 位數驗證碼";
-            default -> message;
+            case "ok" -> "\u64cd\u4f5c\u6210\u529f";
+            case "Users retrieved successfully" -> "\u4f7f\u7528\u8005\u5217\u8868\u53d6\u5f97\u6210\u529f";
+            case "User registered successfully. Verification code has been sent to email" -> "\u8a3b\u518a\u6210\u529f\uff0c\u9a57\u8b49\u78bc\u5df2\u5bc4\u9001\u81f3 Email";
+            case "Google user registered successfully. Verification code has been sent to email" -> "Google \u8a3b\u518a\u6210\u529f\uff0c\u9a57\u8b49\u78bc\u5df2\u5bc4\u9001\u81f3 Email";
+            case "Login successful" -> "\u767b\u5165\u6210\u529f";
+            case "Google login successful" -> "Google \u767b\u5165\u6210\u529f";
+            case "Logout successful" -> "\u767b\u51fa\u6210\u529f";
+            case "User info retrieved successfully" -> "\u4f7f\u7528\u8005\u8cc7\u6599\u53d6\u5f97\u6210\u529f";
+            case "User profile updated successfully" -> "\u4f7f\u7528\u8005\u8cc7\u6599\u66f4\u65b0\u6210\u529f";
+            case "Account deactivated successfully" -> "\u5e33\u865f\u505c\u7528\u6210\u529f";
+            case "Email verified successfully" -> "Email \u9a57\u8b49\u6210\u529f";
+            case "If the email belongs to a local account, a verification code has been sent" -> "\u82e5\u6b64 Email \u5c6c\u65bc\u672c\u5730\u5e33\u865f\uff0c\u9a57\u8b49\u78bc\u5df2\u5bc4\u9001";
+            case "Password reset email verified successfully" -> "\u91cd\u8a2d\u5bc6\u78bc Email \u9a57\u8b49\u6210\u529f";
+            case "Password reset successfully" -> "\u5bc6\u78bc\u91cd\u8a2d\u6210\u529f";
+            case "Organizer account retrieved successfully" -> "\u4e3b\u8fa6\u65b9\u5e33\u865f\u8cc7\u6599\u53d6\u5f97\u6210\u529f";
+            case "Organizer applications retrieved successfully" -> "\u4e3b\u8fa6\u65b9\u7533\u8acb\u5217\u8868\u53d6\u5f97\u6210\u529f";
+            case "Organizer application detail retrieved successfully" -> "\u4e3b\u8fa6\u65b9\u7533\u8acb\u8a73\u60c5\u53d6\u5f97\u6210\u529f";
+            case "Stall selection successful" -> "\u6524\u4f4d\u9078\u64c7\u6210\u529f";
+            case "Event stalls status retrieved successfully" -> "\u6d3b\u52d5\u6524\u4f4d\u72c0\u614b\u53d6\u5f97\u6210\u529f";
+            case "Vendor account retrieved successfully" -> "\u6524\u4e3b\u5e33\u865f\u8cc7\u6599\u53d6\u5f97\u6210\u529f";
+            case "Vendor stall map retrieved successfully" -> "\u6524\u4e3b\u9078\u4f4d\u5730\u5716\u53d6\u5f97\u6210\u529f";
+            default -> isLikelyEnglish(message) ? "\u64cd\u4f5c\u6210\u529f" : message;
         };
     }
 
+    private static String toChineseErrorMessage(String message) {
+        if (message == null || message.isBlank()) {
+            return "\u64cd\u4f5c\u5931\u6557";
+        }
+
+        return switch (message) {
+            case "Admin accounts must be created by the system" -> "\u7ba1\u7406\u54e1\u5e33\u865f\u5fc5\u9808\u7531\u7cfb\u7d71\u5efa\u7acb";
+            case "Admin accounts do not support Google registration" -> "\u7ba1\u7406\u54e1\u5e33\u865f\u4e0d\u652f\u63f4 Google \u8a3b\u518a";
+            case "Admin accounts do not support Google login" -> "\u7ba1\u7406\u54e1\u5e33\u865f\u4e0d\u652f\u63f4 Google \u767b\u5165";
+            case "Email already registered" -> "\u6b64 Email \u5df2\u88ab\u8a3b\u518a";
+            case "Email already verified" -> "\u6b64 Email \u5df2\u5b8c\u6210\u9a57\u8b49";
+            case "Email is required" -> "\u8acb\u8f38\u5165 Email";
+            case "Email is not verified" -> "Email \u5c1a\u672a\u5b8c\u6210\u9a57\u8b49";
+            case "Google account has already register" -> "\u6b64 Google \u5e33\u865f\u5df2\u88ab\u8a3b\u518a";
+            case "Google account is not registered" -> "\u6b64 Google \u5e33\u865f\u5c1a\u672a\u8a3b\u518a";
+            case "Google credential is required" -> "\u8acb\u63d0\u4f9b Google \u767b\u5165\u6191\u8b49";
+            case "Invalid Google credential" -> "Google \u767b\u5165\u6191\u8b49\u7121\u6548";
+            case "Google client id does not match" -> "Google client id \u4e0d\u7b26\u5408";
+            case "Google email is not verified" -> "Google Email \u5c1a\u672a\u5b8c\u6210\u9a57\u8b49";
+            case "Invalid email or password" -> "Email \u6216\u5bc6\u78bc\u932f\u8aa4";
+            case "Invalid or expired token" -> "Token \u7121\u6548\u6216\u5df2\u904e\u671f";
+            case "Invalid or expired verification code" -> "\u9a57\u8b49\u78bc\u7121\u6548\u6216\u5df2\u904e\u671f";
+            case "Invalid or expired reset token" -> "\u91cd\u8a2d\u5bc6\u78bc token \u7121\u6548\u6216\u5df2\u904e\u671f";
+            case "Authorization token is required" -> "\u8acb\u63d0\u4f9b Authorization token";
+            case "Session expired" -> "\u767b\u5165\u72c0\u614b\u5df2\u904e\u671f\uff0c\u8acb\u91cd\u65b0\u767b\u5165";
+            case "User not found" -> "\u627e\u4e0d\u5230\u4f7f\u7528\u8005";
+            case "Organizer profile not found" -> "\u627e\u4e0d\u5230\u4e3b\u8fa6\u65b9\u8cc7\u6599";
+            case "Vendor profile not found" -> "\u627e\u4e0d\u5230\u6524\u4e3b\u8cc7\u6599";
+            case "This account is not an organizer" -> "\u6b64\u5e33\u865f\u4e0d\u662f\u4e3b\u8fa6\u65b9\u5e33\u865f";
+            case "This account is not a vendor" -> "\u6b64\u5e33\u865f\u4e0d\u662f\u6524\u4e3b\u5e33\u865f";
+            case "Application id is required" -> "\u8acb\u63d0\u4f9b\u7533\u8acb ID";
+            case "Application number is required" -> "\u8acb\u63d0\u4f9b\u7533\u8acb\u7de8\u865f";
+            case "Application not found" -> "\u627e\u4e0d\u5230\u7533\u8acb\u8cc7\u6599";
+            case "Application does not belong to this account" -> "\u6b64\u7533\u8acb\u4e0d\u5c6c\u65bc\u76ee\u524d\u767b\u5165\u5e33\u865f";
+            case "Application is not selectable for stall map" -> "\u6b64\u7533\u8acb\u76ee\u524d\u4e0d\u80fd\u67e5\u770b\u9078\u4f4d\u5730\u5716";
+            case "Application is not approved, paid, or selectable" -> "\u6b64\u7533\u8acb\u5c1a\u672a\u901a\u904e\u5be9\u6838\u3001\u5c1a\u672a\u4ed8\u6b3e\u6216\u4e0d\u80fd\u9078\u4f4d";
+            case "Application binding failed" -> "\u7533\u8acb\u7d81\u5b9a\u6524\u4f4d\u5931\u6557";
+            case "Stall number is required" -> "\u8acb\u63d0\u4f9b\u6524\u4f4d\u7de8\u865f";
+            case "Stall is not available" -> "\u6b64\u6524\u4f4d\u4e0d\u53ef\u9078\u64c7";
+            case "Stall has already been selected" -> "\u6b64\u6524\u4f4d\u5df2\u88ab\u9078\u8d70";
+            case "Stall selection failed" -> "\u6524\u4f4d\u9078\u64c7\u5931\u6557";
+            case "Account is not active", "Account is not active or disabled" -> "\u5e33\u865f\u5c1a\u672a\u555f\u7528\u6216\u5df2\u505c\u7528";
+            case "Account role does not match token role" -> "\u5e33\u865f\u89d2\u8272\u8207 token \u89d2\u8272\u4e0d\u7b26\u5408";
+            case "Account cannot be deactivated while vendor applications are still in progress" -> "\u5c1a\u6709\u9032\u884c\u4e2d\u7684\u6524\u4e3b\u5831\u540d\uff0c\u7121\u6cd5\u505c\u7528\u5e33\u865f";
+            case "Account cannot be deactivated while organizer events are still in progress" -> "\u5c1a\u6709\u9032\u884c\u4e2d\u7684\u4e3b\u8fa6\u6d3b\u52d5\uff0c\u7121\u6cd5\u505c\u7528\u5e33\u865f";
+            case "This account role cannot be deactivated from this API" -> "\u6b64\u5e33\u865f\u89d2\u8272\u4e0d\u80fd\u900f\u904e\u6b64 API \u505c\u7528";
+            case "Account deactivation failed" -> "\u5e33\u865f\u505c\u7528\u5931\u6557";
+            case "This account cannot login from this portal" -> "\u6b64\u5e33\u865f\u4e0d\u80fd\u5f9e\u6b64\u5165\u53e3\u767b\u5165";
+            case "Login status update failed" -> "\u767b\u5165\u72c0\u614b\u66f4\u65b0\u5931\u6557";
+            case "Reset token is required" -> "\u8acb\u63d0\u4f9b\u91cd\u8a2d\u5bc6\u78bc token";
+            case "Password is required" -> "\u8acb\u8f38\u5165\u5bc6\u78bc";
+            case "Password reset failed" -> "\u5bc6\u78bc\u91cd\u8a2d\u5931\u6557";
+            case "6-digit verification code is required" -> "\u8acb\u8f38\u5165 6 \u4f4d\u6578\u9a57\u8b49\u78bc";
+            default -> isLikelyEnglish(message) ? "\u64cd\u4f5c\u5931\u6557" : message;
+        };
+    }
+
+    private static boolean isLikelyEnglish(String message) {
+        return message.matches(".*[A-Za-z].*");
+    }
     @JsonIgnore
     public boolean isSuccessStatus() {
         return statusCode >= 200 && statusCode < 300;

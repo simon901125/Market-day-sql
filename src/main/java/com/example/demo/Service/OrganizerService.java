@@ -1,11 +1,13 @@
 package com.example.demo.Service;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -36,9 +38,6 @@ public class OrganizerService {
 
     @Autowired
     private ApplicationStatusService applicationStatusService;
-
-    @Autowired
-    private PaymentStatusService paymentStatusService;
 
     public ApiResponse<OrganizerAccountResponse> getOrganizerAccount(String authorizationHeader) {
         String token = jwtService.extractTokenFromAuthorizationHeader(authorizationHeader);
@@ -124,8 +123,11 @@ public class OrganizerService {
             return ApiResponse.fail("Application not found");
         }
 
-        Map<String, Object> response = toApplicationDetailResponse(withDisplayApplicationStatus(application));
-        response.put("status", toApplicationStatusResponse(application));
+        List<Map<String, Object>> equipmentRentals = organizerRepository.findApplicationEquipmentRentals(applicationId);
+        Map<String, Object> response = toApplicationDetailResponse(
+                withDisplayApplicationStatus(application),
+                equipmentRentals);
+        response.put("status", toApplicationStatusFlow(application));
         return ApiResponse.success(
                 "Organizer application detail retrieved successfully",
                 new OrganizerApplicationDetailResponse(response));
@@ -157,7 +159,9 @@ public class OrganizerService {
                 "applicationStatus", application.get("applicationStatus"));
     }
 
-    private Map<String, Object> toApplicationDetailResponse(Map<String, Object> application) {
+    private Map<String, Object> toApplicationDetailResponse(
+            Map<String, Object> application,
+            List<Map<String, Object>> equipmentRentalRows) {
         Map<String, Object> response = new LinkedHashMap<>();
         response.put("application", orderedMap(
                 "applicationId", application.get("applicationId"),
@@ -197,61 +201,316 @@ public class OrganizerService {
         Object baseFee = application.get("baseFee");
         Object depositAmount = application.get("depositAmount");
         Object totalAmount = application.get("totalAmount");
+        BigDecimal equipmentRentalFee = sumEquipmentRentalFee(equipmentRentalRows);
+        if (equipmentRentalFee == null) {
+            equipmentRentalFee = subtractAmounts(totalAmount, baseFee, depositAmount);
+        }
+        String stallFeeNote = stallFeeNote(application);
+        String rentalFeeNote = rentalFeeNote(equipmentRentalRows);
         response.put("fee", orderedMap(
                 "stallFee", baseFee,
-                "equipmentRentalFee", subtractAmounts(totalAmount, baseFee, depositAmount),
+                "stallFeeNote", stallFeeNote,
+                "rentalFee", equipmentRentalFee,
+                "rentalFeeNote", rentalFeeNote,
+                "equipmentRentalFee", equipmentRentalFee,
                 "depositAmount", depositAmount,
+                "depositNote", null,
                 "totalAmount", totalAmount));
+        response.put("equipmentRentals", toEquipmentRentalResponses(equipmentRentalRows));
 
         return response;
     }
 
-    private Map<String, Object> toApplicationStatusResponse(Map<String, Object> application) {
-        Map<String, Object> statusCreatedAtByField = statusCreatedAtByField(application);
+    private String stallFeeNote(Map<String, Object> application) {
+        String stallSpec = stallSpec(application);
+        String dayLabel = dayLabel(applicationDays(application.get("applyDates")));
+        if (stallSpec == null && dayLabel == null) {
+            return null;
+        }
+        if (stallSpec == null) {
+            return dayLabel;
+        }
+        if (dayLabel == null) {
+            return stallSpec;
+        }
+        return stallSpec + " (" + dayLabel + ")";
+    }
+
+    private String stallSpec(Map<String, Object> application) {
+        String width = decimalText(application.get("stallWidth"));
+        String length = decimalText(application.get("stallLength"));
+        if (width == null || length == null) {
+            return null;
+        }
+        return width + " \u516c\u5c3a x " + length + " \u516c\u5c3a \u6524\u4f4d";
+    }
+
+    private String rentalFeeNote(List<Map<String, Object>> rows) {
+        List<Map<String, Object>> rentals = toEquipmentRentalResponses(rows);
+        if (rentals.isEmpty()) {
+            return null;
+        }
+        return rentals.stream()
+                .map(this::rentalNote)
+                .filter(note -> note != null && !note.isBlank())
+                .reduce((left, right) -> left + "\u3001" + right)
+                .orElse(null);
+    }
+
+    private String rentalNote(Map<String, Object> rental) {
+        String equipmentName = normalizeText(rental.get("equipmentName"));
+        String fee = moneyText(rentalFeePerUnitPeriod(rental));
+        String unit = pricingUnitText(rental.get("pricingUnit"));
+        String rentalUnits = integerText(rental.get("rentalUnits"));
+        if (equipmentName == null || fee == null || unit == null || rentalUnits == null) {
+            return equipmentName;
+        }
+        return equipmentName + " " + fee + "/" + unit + " x " + rentalUnits + unit;
+    }
+
+    private BigDecimal rentalFeePerUnitPeriod(Map<String, Object> rental) {
+        BigDecimal subtotal = toBigDecimal(rental.get("subtotal"));
+        BigDecimal rentalUnits = toBigDecimal(rental.get("rentalUnits"));
+        if (subtotal != null && rentalUnits != null && rentalUnits.compareTo(BigDecimal.ZERO) > 0) {
+            return subtotal.divide(rentalUnits, 2, RoundingMode.HALF_UP);
+        }
+        return toBigDecimal(rental.get("rentalFee"));
+    }
+
+    private List<Map<String, Object>> toEquipmentRentalResponses(List<Map<String, Object>> rows) {
+        Map<Long, Map<String, Object>> rentalsById = new LinkedHashMap<>();
+        for (Map<String, Object> row : rows) {
+            Long rentalId = toLong(row.get("equipmentRentalId"));
+            if (rentalId == null) {
+                continue;
+            }
+
+            Map<String, Object> rental = rentalsById.computeIfAbsent(rentalId, id -> orderedMap(
+                    "equipmentRentalId", id,
+                    "eventEquipmentId", row.get("eventEquipmentId"),
+                    "equipmentName", row.get("equipmentName"),
+                    "rentalFee", row.get("rentalFee"),
+                    "pricingUnit", row.get("pricingUnit"),
+                    "quantity", row.get("quantity"),
+                    "rentalUnits", row.get("rentalUnits"),
+                    "subtotal", row.get("subtotal"),
+                    "appliances", new ArrayList<Map<String, Object>>(),
+                    "totalWattage", null));
+
+            Long applianceId = toLong(row.get("applianceId"));
+            if (applianceId == null) {
+                continue;
+            }
+
+            @SuppressWarnings("unchecked")
+            List<Map<String, Object>> appliances = (List<Map<String, Object>>) rental.get("appliances");
+            appliances.add(orderedMap(
+                    "applianceId", applianceId,
+                    "applianceName", row.get("applianceName"),
+                    "wattage", row.get("wattage")));
+
+            BigDecimal wattage = toBigDecimal(row.get("wattage"));
+            BigDecimal totalWattage = toBigDecimal(rental.get("totalWattage"));
+            if (wattage != null) {
+                rental.put("totalWattage", (totalWattage == null ? BigDecimal.ZERO : totalWattage).add(wattage));
+            }
+        }
+        return new ArrayList<>(rentalsById.values());
+    }
+
+    private BigDecimal sumEquipmentRentalFee(List<Map<String, Object>> rows) {
+        Map<Long, BigDecimal> subtotalsByRentalId = new LinkedHashMap<>();
+        for (Map<String, Object> row : rows) {
+            Long rentalId = toLong(row.get("equipmentRentalId"));
+            BigDecimal subtotal = toBigDecimal(row.get("subtotal"));
+            if (rentalId != null && subtotal != null) {
+                subtotalsByRentalId.putIfAbsent(rentalId, subtotal);
+            }
+        }
+        if (subtotalsByRentalId.isEmpty()) {
+            return null;
+        }
+        return subtotalsByRentalId.values().stream()
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+    }
+
+    private List<Map<String, Object>> toApplicationStatusFlow(Map<String, Object> application) {
+        List<Map<String, Object>> statusLogs = applicationStatusLogs(application);
+        List<Map<String, Object>> flow = new ArrayList<>();
+        String reviewStatus = statusText(application.get("reviewStatus"));
+        String paymentStatus = statusText(application.get("paymentStatus"));
+        String refundStatus = statusText(application.get("refundStatus"));
+        boolean reviewReached = reviewStatus != null && !"PENDING".equals(reviewStatus);
+        boolean cancelled = isTrue(application.get("isCancelled")) || "EXPIRED".equals(paymentStatus);
+        boolean paymentReached = paymentStatus != null
+                && !"PENDING".equals(paymentStatus)
+                && !"EXPIRED".equals(paymentStatus)
+                && reviewReached
+                && !cancelled;
+        boolean refundRequestedReached = refundStatus != null;
+        boolean refundReviewReached = "REFUNDING".equals(refundStatus)
+                || "REFUND_FAILED".equals(refundStatus)
+                || "REFUNDED".equals(refundStatus);
+        boolean refundedReached = "REFUNDED".equals(refundStatus);
+        boolean stallSelectedReached = application.get("selectedStallId") != null;
+        boolean depositReturnedReached = "RETURNED".equals(statusText(application.get("depositStatus")));
+
+        flow.add(statusStep(
+                "APPLIED",
+                "\u5831\u540d\u65e5\u671f",
+                "\u5df2\u5831\u540d",
+                application.get("appliedAt")));
+        flow.add(statusStep(
+                "REVIEW",
+                "\u5be9\u6838\u6642\u9593",
+                reviewReached ? displayReviewStatus(application.get("reviewStatus")) : null,
+                reviewReached
+                        ? statusCreatedAt(statusLogs, "event_applications.review_status", application.get("reviewStatus"))
+                        : null));
+
+        Object cancelledAt = firstPresent(
+                statusCreatedAt(statusLogs, "event_applications.is_cancelled", application.get("isCancelled")),
+                "EXPIRED".equals(paymentStatus)
+                        ? statusCreatedAt(statusLogs, "event_applications.payment_status", "EXPIRED")
+                        : null);
+        flow.add(statusStep(
+                "CANCELLED",
+                "\u53d6\u6d88\u6642\u9593",
+                cancelled ? "\u5df2\u53d6\u6d88" : null,
+                cancelled ? cancelledAt : null));
+
         Object paymentCreatedAt = firstPresent(
-                statusCreatedAtByField.get("event_applications.payment_status"),
+                statusCreatedAt(statusLogs, "event_applications.payment_status", application.get("paymentStatus")),
                 application.get("paidAt"),
                 application.get("paymentCreatedAt"));
-        Object refundCreatedAt = firstPresent(
-                statusCreatedAtByField.get("refunds.refund_status"),
-                application.get("refundedAt"));
+        flow.add(statusStep(
+                "PAYMENT",
+                "\u4ed8\u6b3e\u6642\u9593",
+                paymentReached ? displayPaymentStatus(application) : null,
+                paymentReached ? paymentCreatedAt : null));
+        flow.add(statusStep(
+                "REFUND_REQUESTED",
+                "\u9000\u6b3e\u7533\u8acb\u6642\u9593",
+                refundRequestedReached ? "\u9000\u6b3e\u7533\u8acb\u4e2d" : null,
+                refundRequestedReached
+                        ? firstPresent(
+                                statusCreatedAt(statusLogs, "refunds.refund_status", "REFUND_REQUESTED"),
+                                statusCreatedAt(statusLogs, "event_applications.refund_status", "REFUND_REQUESTED"))
+                        : null));
+        flow.add(statusStep(
+                "REFUND_REVIEW",
+                "\u9000\u6b3e\u5be9\u6838\u6642\u9593",
+                refundReviewReached ? displayRefundReviewStatus(refundStatus) : null,
+                refundReviewReached ? refundReviewCreatedAt(statusLogs, refundStatus) : null));
+        flow.add(statusStep(
+                "REFUNDED",
+                "\u5df2\u9000\u6b3e\u6642\u9593",
+                refundedReached ? "\u5df2\u9000\u6b3e" : null,
+                refundedReached
+                        ? firstPresent(
+                                statusCreatedAt(statusLogs, "refunds.refund_status", "REFUNDED"),
+                                statusCreatedAt(statusLogs, "event_applications.refund_status", "REFUNDED"),
+                                application.get("refundedAt"))
+                        : null));
+        flow.add(statusStep(
+                "STALL_SELECTED",
+                "\u9078\u4f4d\u6642\u9593",
+                stallSelectedReached ? "\u5df2\u9078\u4f4d" : null,
+                stallSelectedReached
+                        ? statusCreatedAt(statusLogs, "event_applications.selected_stall_id", application.get("selectedStallId"))
+                        : null));
+        flow.add(statusStep(
+                "DEPOSIT_RETURNED",
+                "\u4fdd\u8b49\u91d1\u9000\u9084\u6642\u9593",
+                depositReturnedReached ? "\u4fdd\u8b49\u91d1\u5df2\u9000\u9084" : null,
+                depositReturnedReached
+                        ? firstPresent(
+                                statusCreatedAt(statusLogs, "event_applications.deposit_status", "RETURNED"),
+                                application.get("refundedAt"))
+                        : null));
 
-        return orderedMap(
-                "reviewStatus", statusValue(
-                        application.get("reviewStatus"),
-                        firstPresent(statusCreatedAtByField.get("event_applications.review_status"), application.get("appliedAt"))),
-                "paymentStatus", statusValue(application.get("paymentStatus"), paymentCreatedAt),
-                "paymentDisplayStatus", statusValue(paymentStatusService.resolvePaymentStatus(application), paymentCreatedAt),
-                "depositStatus", statusValue(
-                        application.get("depositStatus"),
-                        firstPresent(statusCreatedAtByField.get("event_applications.deposit_status"), application.get("refundedAt"))),
-                "refundStatus", statusValue(application.get("refundStatus"), refundCreatedAt),
-                "isCancelled", statusValue(
-                        application.get("isCancelled"),
-                        statusCreatedAtByField.get("event_applications.is_cancelled")),
-                "selectedStallId", statusValue(
-                        application.get("selectedStallId"),
-                        statusCreatedAtByField.get("event_applications.selected_stall_id")));
+        return flow;
     }
 
-    private Map<String, Object> statusCreatedAtByField(Map<String, Object> application) {
+    private List<Map<String, Object>> applicationStatusLogs(Map<String, Object> application) {
         Long applicationId = toLong(application.get("applicationId"));
         if (applicationId == null) {
-            return Map.of();
+            return List.of();
         }
 
-        Map<String, Object> statusCreatedAtByField = new LinkedHashMap<>();
-        organizerRepository.findApplicationStatusLogs(applicationId)
-                .forEach(statusLog -> statusCreatedAtByField.put(
-                        normalizeText(statusLog.get("statusField")),
-                        statusLog.get("createdAt")));
-        return statusCreatedAtByField;
+        return organizerRepository.findApplicationStatusLogs(applicationId);
     }
 
-    private Map<String, Object> statusValue(Object value, Object createdAt) {
+    private Map<String, Object> statusStep(String key, String label, Object value, Object createdAt) {
         return orderedMap(
+                "key", key,
+                "label", label,
                 "value", value,
                 "createdAt", formatDateTime(createdAt));
+    }
+
+    private Object statusCreatedAt(List<Map<String, Object>> statusLogs, String statusField, Object newStatus) {
+        String normalizedField = normalizeText(statusField);
+        String normalizedStatus = statusText(newStatus);
+        return statusLogs.stream()
+                .filter(statusLog -> normalizedField.equals(normalizeText(statusLog.get("statusField"))))
+                .filter(statusLog -> normalizedStatus == null
+                        || normalizedStatus.equals(statusText(statusLog.get("newStatus"))))
+                .map(statusLog -> statusLog.get("createdAt"))
+                .findFirst()
+                .orElse(null);
+    }
+
+    private Object refundReviewCreatedAt(List<Map<String, Object>> statusLogs, String refundStatus) {
+        return firstPresent(
+                statusCreatedAt(statusLogs, "refunds.refund_status", "REFUNDING"),
+                statusCreatedAt(statusLogs, "event_applications.refund_status", "REFUNDING"),
+                statusCreatedAt(statusLogs, "refunds.refund_status", "REFUND_FAILED"),
+                statusCreatedAt(statusLogs, "event_applications.refund_status", "REFUND_FAILED"),
+                statusCreatedAt(statusLogs, "refunds.refund_status", refundStatus),
+                statusCreatedAt(statusLogs, "event_applications.refund_status", refundStatus));
+    }
+
+    private String displayReviewStatus(Object value) {
+        return switch (statusText(value) == null ? "" : statusText(value)) {
+            case "APPROVED" -> "\u5be9\u6838\u901a\u904e";
+            case "REJECTED" -> "\u5be9\u6838\u672a\u901a\u904e";
+            case "PENDING" -> "\u5be9\u6838\u4e2d";
+            default -> null;
+        };
+    }
+
+    private String displayPaymentStatus(Map<String, Object> application) {
+        String refundStatus = statusText(application.get("refundStatus"));
+        if ("REFUNDED".equals(refundStatus)) {
+            return "\u5df2\u9000\u6b3e";
+        }
+        if ("REFUND_FAILED".equals(refundStatus)) {
+            return "\u9000\u6b3e\u5931\u6557";
+        }
+        if ("REFUNDING".equals(refundStatus)) {
+            return "\u9000\u6b3e\u8655\u7406\u4e2d";
+        }
+        if ("REFUND_REQUESTED".equals(refundStatus)) {
+            return "\u9000\u6b3e\u7533\u8acb\u4e2d";
+        }
+
+        return switch (statusText(application.get("paymentStatus")) == null ? "" : statusText(application.get("paymentStatus"))) {
+            case "PAID" -> "\u4ed8\u6b3e\u6210\u529f";
+            case "FAILED" -> "\u4ed8\u6b3e\u5931\u6557";
+            case "EXPIRED" -> "\u4ed8\u6b3e\u903e\u671f";
+            case "PENDING" -> "\u5f85\u4ed8\u6b3e";
+            default -> null;
+        };
+    }
+
+    private String displayRefundReviewStatus(String refundStatus) {
+        return switch (refundStatus == null ? "" : refundStatus) {
+            case "REFUNDED" -> "\u9000\u6b3e\u5be9\u6838\u901a\u904e";
+            case "REFUNDING" -> "\u9000\u6b3e\u8655\u7406\u4e2d";
+            case "REFUND_FAILED" -> "\u9000\u6b3e\u5931\u6557";
+            default -> "\u9000\u6b3e\u5be9\u6838\u4e2d";
+        };
     }
 
     private Object firstPresent(Object... values) {
@@ -318,6 +577,79 @@ public class OrganizerService {
         }
         String text = value.toString().trim();
         return text.isEmpty() ? null : text;
+    }
+
+    private Integer applicationDays(Object applyDates) {
+        String text = normalizeText(applyDates);
+        if (text == null) {
+            return null;
+        }
+        int days = 0;
+        for (String date : text.split(",")) {
+            if (!date.isBlank()) {
+                days++;
+            }
+        }
+        return days == 0 ? null : days;
+    }
+
+    private String dayLabel(Integer days) {
+        return days == null ? null : days + "\u5929";
+    }
+
+    private String moneyText(Object value) {
+        BigDecimal amount = toBigDecimal(value);
+        if (amount == null) {
+            return null;
+        }
+        return "NT$" + amount.stripTrailingZeros().toPlainString();
+    }
+
+    private String decimalText(Object value) {
+        BigDecimal decimal = toBigDecimal(value);
+        if (decimal == null) {
+            return null;
+        }
+        return decimal.stripTrailingZeros().toPlainString();
+    }
+
+    private String integerText(Object value) {
+        if (value instanceof Number number) {
+            return String.valueOf(number.intValue());
+        }
+        String text = normalizeText(value);
+        if (text == null) {
+            return null;
+        }
+        try {
+            return String.valueOf(new BigDecimal(text).intValue());
+        } catch (NumberFormatException exception) {
+            return null;
+        }
+    }
+
+    private String pricingUnitText(Object value) {
+        return switch (statusText(value) == null ? "" : statusText(value)) {
+            case "DAY" -> "\u5929";
+            case "HOUR" -> "\u5c0f\u6642";
+            default -> null;
+        };
+    }
+
+    private String statusText(Object value) {
+        String text = normalizeText(value);
+        return text == null ? null : text.toUpperCase();
+    }
+
+    private boolean isTrue(Object value) {
+        if (value instanceof Boolean booleanValue) {
+            return booleanValue;
+        }
+        if (value instanceof Number numberValue) {
+            return numberValue.intValue() == 1;
+        }
+        String text = statusText(value);
+        return "TRUE".equals(text) || "1".equals(text);
     }
 
     private String joinAddress(Object city, Object district, Object address) {

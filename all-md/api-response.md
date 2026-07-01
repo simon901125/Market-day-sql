@@ -371,3 +371,88 @@ Service 或 Filter 即使傳入英文 key，也會透過 `ApiResponse.fail(...)`
 - 錯誤請使用 `ApiResponse.fail(...)`，讓錯誤訊息可統一轉成中文。
 - JWT Filter 失敗也會透過 `ApiResponse.fail(statusCode, message)` 回傳中文錯誤。
 - `messageDetails` 目前通常為 `null`；舊版由 `GlobalResponseAdvice` 自動補 `Executed API: ...` 的設計已不是主要資料傳遞方式。
+
+## 2026-07-01 更新：Organizer 申請詳情目前版
+
+`GET /api/organizer/applications/{id}`
+
+此 API 目前回傳重點：
+
+- `message` 會由 `ApiResponse.success(...)` 統一轉為中文。
+- `status` 固定回傳完整狀態流清單，未到達的節點以 `value: null`、`createdAt: null` 表示。
+- `fee` 只保留各項金額與 note，不再回傳 `items`。
+- `equipmentRentals` 回傳申請單已租借設備；若為電力租借，會包含 `appliances` 與 `totalWattage`。
+
+```json
+{
+  "statusCode": 200,
+  "message": "主辦方申請詳情取得成功",
+  "messageDetails": null,
+  "data": {
+    "application": {
+      "applicationId": 101,
+      "applicationNo": "T2-ORDER-0",
+      "applicationStatus": "報名完成"
+    },
+    "event": {
+      "eventTitle": "T2 Organizer1 Timeline Event",
+      "eventTime": "2026-08-10 - 2026-08-12",
+      "address": "Taipei CityXinyi DistrictTimeline Test Address 1"
+    },
+    "vendor": {
+      "vendorOwnerName": "test2 vendor 0 owner",
+      "vendorPhone": "0933000000",
+      "vendorEmail": "test2vendor0@example.test",
+      "address": "Taipei CityXinyi DistrictTest Vendor Road 0"
+    },
+    "brand": {
+      "brandName": "test2 vendor 0 brand",
+      "categoryName": "Food",
+      "brandDescription": "test2 vendor 0 brand description"
+    },
+    "stall": {
+      "selectedStallId": 201,
+      "stallNo": "A01",
+      "zoneName": "A",
+      "width": 3.00,
+      "length": 3.00,
+      "height": 2.50
+    },
+    "fee": {
+      "stallFee": 1200,
+      "stallFeeNote": "3 公尺 x 3 公尺 攤位 (1天)",
+      "rentalFee": 100,
+      "rentalFeeNote": "桌子 NT$100/天 x 1天",
+      "equipmentRentalFee": 100,
+      "depositAmount": 500,
+      "depositNote": null,
+      "totalAmount": 1800
+    },
+    "equipmentRentals": [
+      {
+        "equipmentRentalId": 301,
+        "eventEquipmentId": 401,
+        "equipmentName": "桌子",
+        "rentalFee": 100,
+        "pricingUnit": "DAY",
+        "quantity": 1,
+        "rentalUnits": 1,
+        "subtotal": 100,
+        "appliances": [],
+        "totalWattage": null
+      }
+    ],
+    "status": [
+      { "key": "APPLIED", "label": "報名日期", "value": "已報名", "createdAt": "2026-07-01 09:00" },
+      { "key": "REVIEW", "label": "審核時間", "value": "審核通過", "createdAt": "2026-07-02 10:00" },
+      { "key": "CANCELLED", "label": "取消時間", "value": null, "createdAt": null },
+      { "key": "PAYMENT", "label": "付款時間", "value": "付款成功", "createdAt": "2026-07-03 11:00" },
+      { "key": "REFUND_REQUESTED", "label": "退款申請時間", "value": null, "createdAt": null },
+      { "key": "REFUND_REVIEW", "label": "退款審核時間", "value": null, "createdAt": null },
+      { "key": "REFUNDED", "label": "已退款時間", "value": null, "createdAt": null },
+      { "key": "STALL_SELECTED", "label": "選位時間", "value": "已選位", "createdAt": "2026-07-04 12:00" },
+      { "key": "DEPOSIT_RETURNED", "label": "保證金退還時間", "value": null, "createdAt": null }
+    ]
+  }
+}
+```

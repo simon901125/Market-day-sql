@@ -267,6 +267,31 @@ public class OrganizerRepository {
         return RepositoryResultMapper.normalizeList(namedParameterJdbcTemplate.queryForList(sql, map));
     }
 
+    public List<Map<String, Object>> findApplicationEquipmentRentals(Long applicationId) {
+        String sql = """
+                SELECT
+                    er.id AS equipmentRentalId,
+                    er.event_equipment_id AS eventEquipmentId,
+                    er.equipment_name AS equipmentName,
+                    er.rental_fee AS rentalFee,
+                    er.pricing_unit AS pricingUnit,
+                    er.quantity,
+                    er.rental_units AS rentalUnits,
+                    er.subtotal,
+                    ra.id AS applianceId,
+                    ra.appliance_name AS applianceName,
+                    ra.wattage
+                FROM dbo.equipment_rentals er
+                LEFT JOIN dbo.rental_appliances ra ON ra.equipment_rental_id = er.id
+                WHERE er.application_id = :applicationId
+                ORDER BY er.id ASC, ra.id ASC
+                """;
+
+        Map<String, Object> map = new HashMap<>();
+        map.put("applicationId", applicationId);
+        return RepositoryResultMapper.normalizeList(namedParameterJdbcTemplate.queryForList(sql, map));
+    }
+
     private String normalizeText(String value) {
         if (value == null) {
             return null;
