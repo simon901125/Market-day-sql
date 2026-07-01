@@ -9,10 +9,12 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.interceptor.TransactionAspectSupport;
 
+import com.example.demo.Repository.OrganizerRepository;
 import com.example.demo.Repository.StallRepository;
 import com.example.demo.dto.request.StallSelectionRequest;
 import com.example.demo.dto.response.ApiResponse;
 import com.example.demo.dto.response.EventStallStatusResponse;
+import com.example.demo.dto.response.MapBackedResponse;
 import com.example.demo.dto.response.StallSelectionResponse;
 import com.example.demo.dto.response.VendorAccountResponse;
 import com.example.demo.dto.response.VendorStallMapResponse;
@@ -22,6 +24,9 @@ public class StallService {
 
     @Autowired
     private StallRepository stallRepository;
+
+    @Autowired
+    private OrganizerRepository organizerRepository;
 
     @Autowired
     private JwtService jwtService;
@@ -62,10 +67,10 @@ public class StallService {
             return ApiResponse.fail("This account is not a vendor");
         }
 
-        Map<String, Object> application = stallRepository.findSelectableApplication(body.getApplicationNo())
+        Map<String, Object> application = stallRepository.findApplicationForSelection(body.getApplicationNo())
                 .orElse(null);
         if (application == null) {
-            return ApiResponse.fail("Application is not approved, paid, or selectable");
+            return ApiResponse.fail("Application not found");
         }
 
         Long vendorUserId = ((Number) vendor.get("userId")).longValue();
@@ -74,13 +79,49 @@ public class StallService {
             return ApiResponse.fail("Application does not belong to this account");
         }
 
+        if (isTrue(application.get("isCancelled"))) {
+            return ApiResponse.fail("Application has been cancelled");
+        }
+
+        String reviewStatus = stringValue(application.get("reviewStatus"));
+        if ("PENDING".equals(reviewStatus)) {
+            return ApiResponse.fail("Application review is pending");
+        }
+        if ("REJECTED".equals(reviewStatus)) {
+            return ApiResponse.fail("Application review was rejected");
+        }
+        if (!"APPROVED".equals(reviewStatus)) {
+            return ApiResponse.fail("Application is not approved");
+        }
+
+        String paymentStatus = stringValue(application.get("paymentStatus"));
+        if ("PENDING".equals(paymentStatus)) {
+            return ApiResponse.fail("Application payment is pending");
+        }
+        if (!"PAID".equals(paymentStatus)) {
+            return ApiResponse.fail("Application payment is not paid");
+        }
+
+        if (application.get("selectedStallId") != null) {
+            return ApiResponse.fail("Application has already selected a stall");
+        }
+
         Long eventId = ((Number) application.get("eventId")).longValue();
-        Long stallId = stallRepository.findStallId(eventId, body.getStallNo())
+        Map<String, Object> stall = stallRepository.findStallForSelection(eventId, body.getStallNo())
                 .orElse(null);
-        if (stallId == null) {
+        if (stall == null) {
+            return ApiResponse.fail("Stall not found");
+        }
+
+        String stallStatus = stringValue(stall.get("status"));
+        if ("SELECTED".equals(stallStatus)) {
+            return ApiResponse.fail("Stall has already been selected");
+        }
+        if (!"AVAILABLE".equals(stallStatus)) {
             return ApiResponse.fail("Stall is not available");
         }
 
+        Long stallId = ((Number) stall.get("id")).longValue();
         // Claim the stall first so concurrent selection has one winner.
         int stallUpdatedRows = stallRepository.selectAvailableStall(stallId);
         if (stallUpdatedRows == 0) {
@@ -93,7 +134,7 @@ public class StallService {
                 stallId);
         if (applicationUpdatedRows == 0) {
             TransactionAspectSupport.currentTransactionStatus().setRollbackOnly();
-            return ApiResponse.fail("Application binding failed");
+            return ApiResponse.fail("Application status changed during stall selection");
         }
 
         return ApiResponse.success(
@@ -224,14 +265,171 @@ public class StallService {
         return ApiResponse.success("Vendor stall map retrieved successfully", new VendorStallMapResponse(application, event, stalls));
     }
 
+    public ApiResponse<MapBackedResponse> getOrganizerStallMap(String authorizationHeader, Long eventId) {
+        Map<String, Object> organizer = authenticatedOrganizer(authorizationHeader);
+        if (organizer.containsKey("message")) {
+            return ApiResponse.fail(organizer.get("message").toString());
+        }
+        if (eventId == null) {
+            return ApiResponse.fail("Event id is required");
+        }
+
+        Long organizerUserId = ((Number) organizer.get("userId")).longValue();
+        Map<String, Object> eventData = stallRepository.findOrganizerStallMapEvent(organizerUserId, eventId)
+                .orElse(null);
+        if (eventData == null) {
+            return ApiResponse.fail("Event not found");
+        }
+
+        List<Map<String, Object>> stallRows = stallRepository.findEventStallsMap(eventId).stream()
+                .map(this::withDisplayBoothStatus)
+                .toList();
+
+        Map<String, Object> event = new LinkedHashMap<>();
+        event.put("eventId", eventData.get("eventId"));
+        event.put("eventTitle", eventData.get("eventTitle"));
+        event.put("startAt", eventData.get("startAt"));
+        event.put("endAt", eventData.get("endAt"));
+        event.put("address", joinAddress(
+                eventData.get("city"),
+                eventData.get("district"),
+                eventData.get("address")));
+        event.put("mapImageUrl", eventData.get("mapImageUrl"));
+
+        return ApiResponse.success(
+                "Organizer stall map retrieved successfully",
+                new MapBackedResponse(orderedMap(
+                        "event", event,
+                        "stalls", groupStallsByZone(stallRows))));
+    }
+
+    public ApiResponse<MapBackedResponse> getOrganizerStallMapDetail(
+            String authorizationHeader,
+            Long eventId,
+            String stallNo) {
+        Map<String, Object> organizer = authenticatedOrganizer(authorizationHeader);
+        if (organizer.containsKey("message")) {
+            return ApiResponse.fail(organizer.get("message").toString());
+        }
+        if (eventId == null) {
+            return ApiResponse.fail("Event id is required");
+        }
+        if (stallNo == null || stallNo.isBlank()) {
+            return ApiResponse.fail("Stall number is required");
+        }
+
+        Long organizerUserId = ((Number) organizer.get("userId")).longValue();
+        Map<String, Object> detail = stallRepository
+                .findOrganizerStallMapDetail(organizerUserId, eventId, stallNo)
+                .orElse(null);
+        if (detail == null) {
+            return ApiResponse.fail("Stall not found");
+        }
+
+        Map<String, Object> applicationData = applicationData(detail);
+
+        Map<String, Object> stall = new LinkedHashMap<>();
+        stall.put("stallId", detail.get("stallId"));
+        stall.put("stallNo", detail.get("stallNo"));
+        stall.put("zoneId", detail.get("zoneId"));
+        stall.put("zoneName", detail.get("zoneName"));
+        stall.put("width", detail.get("width"));
+        stall.put("length", detail.get("length"));
+        stall.put("height", detail.get("height"));
+        stall.put("status", displayBoothStatus(detail.get("stallStatus")));
+        stall.put("selectedAt", detail.get("selectedAt"));
+
+        Map<String, Object> response = orderedMap(
+                "stall", stall,
+                "application", applicationData == null ? null : orderedMap(
+                        "id", detail.get("applicationId")),
+                "vendor", applicationData == null ? null : orderedMap(
+                        "brandName", detail.get("brandName"),
+                        "vendorOwnerName", detail.get("vendorOwnerName"),
+                        "vendorPhone", detail.get("vendorPhone"),
+                        "vendorEmail", detail.get("vendorEmail")));
+
+        return ApiResponse.success(
+                "Organizer stall detail retrieved successfully",
+                new MapBackedResponse(response));
+    }
+
     private boolean canViewStallMap(String applicationStatus, Map<String, Object> applicationData) {
         return "待選位".equals(applicationStatus) || isSelectedStallApplication(applicationData);
+    }
+
+    private Map<String, Object> authenticatedOrganizer(String authorizationHeader) {
+        String token = jwtService.extractTokenFromAuthorizationHeader(authorizationHeader);
+        if (token == null || token.isBlank()) {
+            return Map.of("message", "Authorization token is required");
+        }
+        if (!jwtService.isTokenValid(token)) {
+            return Map.of("message", "Invalid or expired token");
+        }
+        if (!"ORGANIZER".equals(jwtService.getRole(token))) {
+            return Map.of("message", "This account is not an organizer");
+        }
+
+        Map<String, Object> organizer = organizerRepository.findOrganizerAccountByEmail(jwtService.getEmail(token))
+                .orElse(null);
+        if (organizer == null) {
+            return Map.of("message", "Organizer profile not found");
+        }
+        if (!"ORGANIZER".equals(organizer.get("role"))) {
+            return Map.of("message", "This account is not an organizer");
+        }
+        return organizer;
+    }
+
+    private Map<String, Object> applicationData(Map<String, Object> detail) {
+        if (detail.get("applicationId") == null) {
+            return null;
+        }
+        return orderedMap(
+                "reviewStatus", detail.get("reviewStatus"),
+                "paymentStatus", detail.get("paymentStatus"),
+                "depositStatus", detail.get("depositStatus"),
+                "isCancelled", detail.get("isCancelled"),
+                "selectedStallId", detail.get("stallId"),
+                "eventEndAt", null,
+                "refundStatus", detail.get("refundStatus"));
+    }
+
+    private String paymentStatusText(Object status) {
+        return switch (stringValue(status)) {
+            case "PAID" -> "付款完成";
+            case "PENDING" -> "待付款";
+            case "FAILED" -> "付款失敗";
+            case "EXPIRED" -> "付款逾期";
+            default -> normalizeText(status);
+        };
     }
 
     private Map<String, Object> withDisplayBoothStatus(Map<String, Object> stall) {
         Map<String, Object> response = new LinkedHashMap<>(stall);
         response.put("status", displayBoothStatus(stall.get("status")));
         return response;
+    }
+
+    private List<Map<String, Object>> groupStallsByZone(List<Map<String, Object>> stalls) {
+        Map<String, Map<String, Object>> zones = new LinkedHashMap<>();
+        for (Map<String, Object> stall : stalls) {
+            String zoneName = normalizeText(stall.get("zoneName"));
+            if (zoneName.isEmpty()) {
+                zoneName = "未分區";
+            }
+            Map<String, Object> zone = zones.computeIfAbsent(zoneName, key -> orderedMap(
+                    "zoneName", key,
+                    "zoneId", stall.get("zoneId"),
+                    "stalls", new java.util.ArrayList<Map<String, Object>>()));
+
+            Map<String, Object> stallData = new LinkedHashMap<>(stall);
+            stallData.remove("zoneName");
+            @SuppressWarnings("unchecked")
+            List<Map<String, Object>> zoneStalls = (List<Map<String, Object>>) zone.get("stalls");
+            zoneStalls.add(stallData);
+        }
+        return List.copyOf(zones.values());
     }
 
     private String displayBoothStatus(Object status) {
@@ -301,5 +499,13 @@ public class StallService {
 
     private String stringValue(Object value) {
         return value == null ? "" : value.toString().trim().toUpperCase();
+    }
+
+    private Map<String, Object> orderedMap(Object... keyValues) {
+        Map<String, Object> map = new LinkedHashMap<>();
+        for (int i = 0; i + 1 < keyValues.length; i += 2) {
+            map.put(keyValues[i].toString(), keyValues[i + 1]);
+        }
+        return map;
     }
 }

@@ -6,12 +6,17 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.example.demo.Service.OrganizerService;
+import com.example.demo.Service.StallService;
+import com.example.demo.dto.request.OrganizerApplicationReviewRequest;
 import com.example.demo.dto.response.ApiResponse;
+import com.example.demo.dto.response.MapBackedResponse;
 import com.example.demo.dto.response.OrganizerAccountResponse;
 import com.example.demo.dto.response.OrganizerApplicationDetailResponse;
 import com.example.demo.dto.response.OrganizerApplicationSearchResponse;
@@ -25,6 +30,9 @@ public class OrganizerController {
 
     @Autowired
     private OrganizerService organizerService;
+
+    @Autowired
+    private StallService stallService;
 
     @Operation(summary = "取得主辦方帳號資訊", description = "回傳目前登入主辦方的主辦方名稱、聯絡資訊、公司資訊、地址與服務時間。")
     @GetMapping("/api/organizer/account")
@@ -57,5 +65,39 @@ public class OrganizerController {
             @RequestHeader(value = "Authorization", required = false) String authorizationHeader,
             @PathVariable Long id) {
         return organizerService.getOrganizerApplicationDetail(authorizationHeader, id);
+    }
+
+    @Operation(summary = "通過主辦活動報名", description = "主辦方針對指定報名申請審核通過。")
+    @PostMapping("/api/organizer/applications/{id}/approve")
+    public ApiResponse<MapBackedResponse> approveOrganizerApplication(
+            @RequestHeader(value = "Authorization", required = false) String authorizationHeader,
+            @PathVariable Long id) {
+        return organizerService.approveOrganizerApplication(authorizationHeader, id);
+    }
+
+    @Operation(summary = "退回主辦活動報名", description = "主辦方針對指定報名申請審核不通過，可附上不通過原因。")
+    @PostMapping("/api/organizer/applications/{id}/reject")
+    public ApiResponse<MapBackedResponse> rejectOrganizerApplication(
+            @RequestHeader(value = "Authorization", required = false) String authorizationHeader,
+            @PathVariable Long id,
+            @RequestBody(required = false) OrganizerApplicationReviewRequest body) {
+        return organizerService.rejectOrganizerApplication(authorizationHeader, id, body);
+    }
+
+    @Operation(summary = "取得主辦方活動攤位地圖", description = "依 eventId 取得主辦方活動資訊與全部攤位狀態。")
+    @GetMapping("/api/organizer/stall-map/{eventId}")
+    public ApiResponse<MapBackedResponse> getOrganizerStallMap(
+            @RequestHeader(value = "Authorization", required = false) String authorizationHeader,
+            @PathVariable Long eventId) {
+        return stallService.getOrganizerStallMap(authorizationHeader, eventId);
+    }
+
+    @Operation(summary = "取得主辦方攤位登記資料", description = "依 eventId 與 stallNo 取得攤位資訊；若已被登記，會回傳攤商與申請資料。")
+    @GetMapping("/api/organizer/stall-map/{eventId}/stalls/{stallNo}")
+    public ApiResponse<MapBackedResponse> getOrganizerStallMapDetail(
+            @RequestHeader(value = "Authorization", required = false) String authorizationHeader,
+            @PathVariable Long eventId,
+            @PathVariable String stallNo) {
+        return stallService.getOrganizerStallMapDetail(authorizationHeader, eventId, stallNo);
     }
 }

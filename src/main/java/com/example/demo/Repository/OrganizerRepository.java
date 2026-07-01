@@ -292,6 +292,31 @@ public class OrganizerRepository {
         return RepositoryResultMapper.normalizeList(namedParameterJdbcTemplate.queryForList(sql, map));
     }
 
+    public int updateApplicationReviewStatus(
+            Long organizerUserId,
+            Long applicationId,
+            String reviewStatus,
+            String reviewNote) {
+        String sql = """
+                UPDATE a
+                SET review_status = :reviewStatus,
+                    review_note = :reviewNote
+                FROM dbo.event_applications a
+                INNER JOIN dbo.market_events e ON e.id = a.event_id
+                WHERE a.id = :applicationId
+                  AND e.user_id = :organizerUserId
+                  AND a.review_status = N'PENDING'
+                  AND a.is_cancelled = 0
+                """;
+
+        Map<String, Object> map = new HashMap<>();
+        map.put("organizerUserId", organizerUserId);
+        map.put("applicationId", applicationId);
+        map.put("reviewStatus", reviewStatus);
+        map.put("reviewNote", normalizeText(reviewNote));
+        return namedParameterJdbcTemplate.update(sql, map);
+    }
+
     private String normalizeText(String value) {
         if (value == null) {
             return null;

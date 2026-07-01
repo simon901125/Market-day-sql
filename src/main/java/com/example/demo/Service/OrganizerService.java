@@ -16,11 +16,16 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import com.example.demo.Repository.OrganizerRepository;
+import com.example.demo.dto.request.OrganizerApplicationReviewRequest;
 import com.example.demo.dto.response.ApiResponse;
+import com.example.demo.dto.response.MapBackedResponse;
 import com.example.demo.dto.response.OrganizerAccountResponse;
 import com.example.demo.dto.response.OrganizerApplicationDetailResponse;
 import com.example.demo.dto.response.OrganizerApplicationSearchResponse;
 import com.example.demo.dto.response.OrganizerApplicationSummaryResponse;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 @Service
 public class OrganizerService {
@@ -29,6 +34,9 @@ public class OrganizerService {
     private static final DateTimeFormatter SPACE_DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
     private static final DateTimeFormatter DISPLAY_DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd");
     private static final DateTimeFormatter DISPLAY_DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
+    private static final TypeReference<Map<String, Object>> STRING_OBJECT_MAP = new TypeReference<>() {
+    };
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
     @Autowired
     private OrganizerRepository organizerRepository;
@@ -133,6 +141,87 @@ public class OrganizerService {
                 new OrganizerApplicationDetailResponse(response));
     }
 
+    public ApiResponse<MapBackedResponse> approveOrganizerApplication(
+            String authorizationHeader,
+            Long applicationId) {
+        return reviewOrganizerApplication(
+                authorizationHeader,
+                applicationId,
+                "APPROVED",
+                null,
+                null);
+    }
+
+    public ApiResponse<MapBackedResponse> rejectOrganizerApplication(
+            String authorizationHeader,
+            Long applicationId,
+            OrganizerApplicationReviewRequest body) {
+        return reviewOrganizerApplication(
+                authorizationHeader,
+                applicationId,
+                "REJECTED",
+                body == null ? null : body.getReviewNote(),
+                body == null ? null : body.getReviewNoteDetail());
+    }
+
+    private ApiResponse<MapBackedResponse> reviewOrganizerApplication(
+            String authorizationHeader,
+            Long applicationId,
+            String reviewStatus,
+            String rawReviewNote,
+            String rawReviewNoteDetail) {
+        Map<String, Object> organizer = getAuthenticatedOrganizer(authorizationHeader);
+        if (organizer.containsKey("message")) {
+            return ApiResponse.fail(organizer.get("message").toString());
+        }
+        if (applicationId == null) {
+            return ApiResponse.fail("Application id is required");
+        }
+        if (reviewStatus == null) {
+            return ApiResponse.fail("Review status is invalid");
+        }
+        String reviewNote = null;
+        String reviewNoteDetail = null;
+        String reviewNotePayload = null;
+        if ("REJECTED".equals(reviewStatus)) {
+            reviewNote = normalizeText(rawReviewNote);
+            reviewNoteDetail = normalizeText(rawReviewNoteDetail);
+            reviewNotePayload = reviewNotePayload(reviewNote, reviewNoteDetail);
+        }
+
+        Long organizerUserId = ((Number) organizer.get("userId")).longValue();
+        Map<String, Object> application = organizerRepository
+                .findOrganizerApplicationDetail(organizerUserId, applicationId)
+                .orElse(null);
+        if (application == null) {
+            return ApiResponse.fail("Application not found");
+        }
+        if (!"PENDING".equals(statusText(application.get("reviewStatus")))) {
+            return ApiResponse.fail("Application has already been reviewed");
+        }
+        if (isTrue(application.get("isCancelled"))) {
+            return ApiResponse.fail("Application has been cancelled");
+        }
+
+        int updatedRows = organizerRepository.updateApplicationReviewStatus(
+                organizerUserId,
+                applicationId,
+                reviewStatus,
+                reviewNotePayload);
+        if (updatedRows == 0) {
+            return ApiResponse.fail("Application review failed");
+        }
+
+        return ApiResponse.success(
+                "Organizer application reviewed successfully",
+                new MapBackedResponse(orderedMap(
+                        "applicationId", applicationId,
+                        "applicationNo", application.get("applicationNo"),
+                        "reviewStatus", reviewStatus,
+                        "reviewNote", reviewNote,
+                        "reviewNoteDetail", reviewNoteDetail)));
+    }
+
     private Map<String, Object> withDisplayApplicationStatus(Map<String, Object> application) {
         Map<String, Object> response = new LinkedHashMap<>(application);
         response.put("applicationStatus", applicationStatusService.resolveApplicationStatus(application));
@@ -163,10 +252,13 @@ public class OrganizerService {
             Map<String, Object> application,
             List<Map<String, Object>> equipmentRentalRows) {
         Map<String, Object> response = new LinkedHashMap<>();
+        Map<String, Object> reviewNote = parseReviewNote(application.get("reviewNote"));
         response.put("application", orderedMap(
                 "applicationId", application.get("applicationId"),
                 "applicationNo", application.get("applicationNo"),
-                "applicationStatus", application.get("applicationStatus")));
+                "applicationStatus", application.get("applicationStatus"),
+                "reviewNote", reviewNote.get("reviewNote"),
+                "reviewNoteDetail", reviewNote.get("reviewNoteDetail")));
 
         response.put("event", orderedMap(
                 "eventTitle", application.get("eventTitle"),
@@ -219,6 +311,41 @@ public class OrganizerService {
         response.put("equipmentRentals", toEquipmentRentalResponses(equipmentRentalRows));
 
         return response;
+    }
+
+    private String reviewNotePayload(String reviewNote, String reviewNoteDetail) {
+        if (reviewNote == null && reviewNoteDetail == null) {
+            return null;
+        }
+        try {
+            return objectMapper.writeValueAsString(orderedMap(
+                    "reviewNote", reviewNote,
+                    "reviewNoteDetail", reviewNoteDetail));
+        } catch (JsonProcessingException e) {
+            return reviewNote;
+        }
+    }
+
+    private Map<String, Object> parseReviewNote(Object value) {
+        String text = normalizeText(value);
+        if (text == null) {
+            return orderedMap(
+                    "reviewNote", null,
+                    "reviewNoteDetail", null);
+        }
+        if (text.startsWith("{")) {
+            try {
+                Map<String, Object> parsed = objectMapper.readValue(text, STRING_OBJECT_MAP);
+                return orderedMap(
+                        "reviewNote", normalizeText(parsed.get("reviewNote")),
+                        "reviewNoteDetail", normalizeText(parsed.get("reviewNoteDetail")));
+            } catch (JsonProcessingException ignored) {
+                // Fall through to legacy plain-text handling.
+            }
+        }
+        return orderedMap(
+                "reviewNote", text,
+                "reviewNoteDetail", null);
     }
 
     private String stallFeeNote(Map<String, Object> application) {

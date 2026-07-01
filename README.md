@@ -14,6 +14,8 @@ Market Day 後端 API 專案，使用 Spring Boot 建置，包含帳號註冊、
 - `GET /api/organizer/applications/{id}` 的 `status` 改為固定狀態流清單，包含報名、審核、取消、付款、退款申請、退款審核、已退款、選位、保證金退還；未到達的節點回傳 `value: null` 與 `createdAt: null`。
 - `GET /api/organizer/applications/{id}` 的 `fee` 補上 `stallFeeNote`、`rentalFee`、`rentalFeeNote`、`depositNote`，移除重複的 `items` 結構，方便前端直接顯示報名費用明細。
 - `ApiResponse.success(...)` 與 `ApiResponse.fail(...)` 訊息統一轉為中文；未列入 mapping 的英文成功訊息會 fallback 為 `操作成功`。
+- `POST /api/stalls/select` 的 `StallSelectionRequest` 移除 `applicationNo`、`stallNo` 的格式 pattern 限制，僅保留必填檢查。
+- `POST /api/stalls/select` 的錯誤訊息拆分為申請單狀態問題與攤位選位機制問題，方便測試時判斷是審核、付款、已選位、攤位不存在或攤位已被選走。
 
 - 新增 API 請求紀錄流程：`RequestLoggingFilter` 只記錄會異動資料的 API，並透過 `request_logs.status_code` 保存實際回傳結果。
 - 新增 `status_logs` 寫入流程，將狀態異動集中在 `StatusLogService` 規則表中處理，支援登入、登出、停用帳號、Email 驗證與選位狀態紀錄。
@@ -256,3 +258,9 @@ GET  /api/organizer/applications/{id}
 http://localhost:8081/test.html
 http://localhost:8081/test_2.html
 ```
+
+## 2026-07-01 simon branch 補充更新
+
+- `POST /api/organizer/applications/{id}/approve` 與 `POST /api/organizer/applications/{id}/reject` 拆分主辦方報名審核 API；申請 `id` 改由 path params 傳入，通過不需 body，退件 body 可帶 `reviewNote`、`reviewNoteDetail`。
+- 退件原因在不變更 SQL 結構下以 JSON 字串存入 `event_applications.review_note`，格式為 `{"reviewNote":"...","reviewNoteDetail":"..."}`。
+- `GET /api/organizer/applications/{id}` 會解析 `event_applications.review_note`，回傳 `application.reviewNote` 與 `application.reviewNoteDetail`；若遇到舊純文字資料，會以 `reviewNote` 回傳並讓 `reviewNoteDetail` 為 `null`。
