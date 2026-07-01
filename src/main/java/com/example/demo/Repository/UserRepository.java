@@ -257,8 +257,24 @@ public class UserRepository {
                 SET isLogin = 0
                 WHERE isLogin = 1
                   AND expired_time <= SYSDATETIME()
-                """;
+        """;
         return namedParameterJdbcTemplate.update(sql, Map.of());
+    }
+
+    public List<Long> autoLogoutExpiredUsersAndReturnIds() {
+        String sql = """
+                DECLARE @updated_users TABLE (id BIGINT);
+
+                UPDATE users
+                SET isLogin = 0
+                OUTPUT inserted.id INTO @updated_users
+                WHERE isLogin = 1
+                  AND expired_time <= SYSDATETIME()
+
+                SELECT id
+                FROM @updated_users
+                """;
+        return namedParameterJdbcTemplate.queryForList(sql, Map.of(), Long.class);
     }
 
     public boolean isCurrentLoginSession(

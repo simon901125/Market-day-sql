@@ -25,6 +25,7 @@ public class OrganizerService {
 
     private static final DateTimeFormatter SERVICE_TIME_FORMATTER = DateTimeFormatter.ofPattern("HH:mm");
     private static final DateTimeFormatter SPACE_DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+    private static final DateTimeFormatter DISPLAY_DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd");
     private static final DateTimeFormatter DISPLAY_DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
 
     @Autowired
@@ -123,9 +124,11 @@ public class OrganizerService {
             return ApiResponse.fail("Application not found");
         }
 
+        Map<String, Object> response = toApplicationDetailResponse(withDisplayApplicationStatus(application));
+        response.put("status", toApplicationStatusResponse(application));
         return ApiResponse.success(
                 "Organizer application detail retrieved successfully",
-                new OrganizerApplicationDetailResponse(toApplicationDetailResponse(withDisplayApplicationStatus(application))));
+                new OrganizerApplicationDetailResponse(response));
     }
 
     private Map<String, Object> withDisplayApplicationStatus(Map<String, Object> application) {
@@ -156,61 +159,23 @@ public class OrganizerService {
 
     private Map<String, Object> toApplicationDetailResponse(Map<String, Object> application) {
         Map<String, Object> response = new LinkedHashMap<>();
-        response.put("applicationId", application.get("applicationId"));
-        response.put("applicationNo", application.get("applicationNo"));
-        response.put("applicationStatus", application.get("applicationStatus"));
+        response.put("application", orderedMap(
+                "applicationId", application.get("applicationId"),
+                "applicationNo", application.get("applicationNo"),
+                "applicationStatus", application.get("applicationStatus")));
 
         response.put("event", orderedMap(
-                "eventId", application.get("eventId"),
                 "eventTitle", application.get("eventTitle"),
-                "eventSummary", application.get("eventSummary"),
-                "eventDescription", application.get("eventDescription"),
-                "eventTime", formatEventTime(application),
-                "eventStartAt", application.get("eventStartAt"),
-                "eventEndAt", application.get("eventEndAt"),
-                "locationName", application.get("locationName"),
-                "city", application.get("eventCity"),
-                "district", application.get("eventDistrict"),
+                "eventTime", formatEventDate(application),
                 "address", joinAddress(
                         application.get("eventCity"),
                         application.get("eventDistrict"),
-                        application.get("eventAddress")),
-                "coverImageUrl", application.get("eventCoverImageUrl")));
-
-        response.put("application", orderedMap(
-                "applicationNo", application.get("applicationNo"),
-                "applicationStatus", application.get("applicationStatus"),
-                "reviewStatus", application.get("reviewStatus"),
-                "paymentStatus", application.get("paymentStatus"),
-                "paymentDisplayStatus", paymentStatusService.resolvePaymentStatus(application),
-                "depositStatus", application.get("depositStatus"),
-                "refundStatus", application.get("refundStatus"),
-                "isCancelled", application.get("isCancelled"),
-                "appliedAt", application.get("appliedAt"),
-                "paymentDueAt", application.get("paymentDueAt"),
-                "reviewNote", application.get("reviewNote"),
-                "applicantNote", application.get("applicantNote"),
-                "vehicleNo", application.get("vehicleNo")));
-
-        response.put("statusTimeline", orderedMap(
-                "appliedAt", application.get("appliedAt"),
-                "reviewedAt", null,
-                "paymentCreatedAt", application.get("paymentCreatedAt"),
-                "paidAt", application.get("paidAt"),
-                "refundRequestedAt", null,
-                "refundReviewedAt", null,
-                "refundedAt", application.get("refundedAt")));
+                        application.get("eventAddress"))));
 
         response.put("vendor", orderedMap(
-                "vendorUserId", application.get("vendorUserId"),
-                "vendorProfileId", application.get("vendorProfileId"),
-                "vendorName", application.get("vendorName"),
                 "vendorOwnerName", application.get("vendorOwnerName"),
                 "vendorPhone", application.get("vendorPhone"),
                 "vendorEmail", application.get("vendorContactEmail"),
-                "loginEmail", application.get("vendorEmail"),
-                "city", application.get("vendorCity"),
-                "district", application.get("vendorDistrict"),
                 "address", joinAddress(
                         application.get("vendorCity"),
                         application.get("vendorDistrict"),
@@ -218,47 +183,84 @@ public class OrganizerService {
 
         response.put("brand", orderedMap(
                 "brandName", application.get("vendorName"),
-                "brandType", application.get("brandType"),
                 "categoryName", application.get("categoryName"),
-                "brandDescription", application.get("brandDescription"),
-                "productSummary", application.get("productSummary"),
-                "avatarUrl", application.get("vendorAvatarUrl"),
-                "instagramUrl", application.get("instagramUrl"),
-                "facebookUrl", application.get("facebookUrl"),
-                "websiteUrl", application.get("websiteUrl")));
+                "brandDescription", application.get("brandDescription")));
 
-        response.put("registration", orderedMap(
-                "applyDates", application.get("applyDates"),
-                "stall", orderedMap(
-                        "selectedStallId", application.get("selectedStallId"),
-                        "stallNo", application.get("selectedStallNo"),
-                        "zoneName", application.get("stallZoneName"),
-                        "width", application.get("stallWidth"),
-                        "length", application.get("stallLength"),
-                        "height", application.get("stallHeight"))));
+        response.put("stall", orderedMap(
+                "selectedStallId", application.get("selectedStallId"),
+                "stallNo", application.get("selectedStallNo"),
+                "zoneName", application.get("stallZoneName"),
+                "width", application.get("stallWidth"),
+                "length", application.get("stallLength"),
+                "height", application.get("stallHeight")));
 
         Object baseFee = application.get("baseFee");
         Object depositAmount = application.get("depositAmount");
         Object totalAmount = application.get("totalAmount");
         response.put("fee", orderedMap(
-                "baseFee", baseFee,
+                "stallFee", baseFee,
+                "equipmentRentalFee", subtractAmounts(totalAmount, baseFee, depositAmount),
                 "depositAmount", depositAmount,
-                "otherFeeAmount", subtractAmounts(totalAmount, baseFee, depositAmount),
-                "totalAmount", totalAmount,
-                "payment", orderedMap(
-                        "paymentNo", application.get("paymentNo"),
-                        "paymentAmount", application.get("paymentAmount"),
-                        "paymentProvider", application.get("paymentProvider"),
-                        "providerTradeNo", application.get("paymentProviderTradeNo"),
-                        "paymentStatus", application.get("paymentRecordStatus"),
-                        "paidAt", application.get("paidAt")),
-                "refund", orderedMap(
-                        "refundNo", application.get("refundNo"),
-                        "refundAmount", application.get("refundAmount"),
-                        "refundStatus", application.get("refundStatus"),
-                        "refundedAt", application.get("refundedAt"))));
+                "totalAmount", totalAmount));
 
         return response;
+    }
+
+    private Map<String, Object> toApplicationStatusResponse(Map<String, Object> application) {
+        Map<String, Object> statusCreatedAtByField = statusCreatedAtByField(application);
+        Object paymentCreatedAt = firstPresent(
+                statusCreatedAtByField.get("event_applications.payment_status"),
+                application.get("paidAt"),
+                application.get("paymentCreatedAt"));
+        Object refundCreatedAt = firstPresent(
+                statusCreatedAtByField.get("refunds.refund_status"),
+                application.get("refundedAt"));
+
+        return orderedMap(
+                "reviewStatus", statusValue(
+                        application.get("reviewStatus"),
+                        firstPresent(statusCreatedAtByField.get("event_applications.review_status"), application.get("appliedAt"))),
+                "paymentStatus", statusValue(application.get("paymentStatus"), paymentCreatedAt),
+                "paymentDisplayStatus", statusValue(paymentStatusService.resolvePaymentStatus(application), paymentCreatedAt),
+                "depositStatus", statusValue(
+                        application.get("depositStatus"),
+                        firstPresent(statusCreatedAtByField.get("event_applications.deposit_status"), application.get("refundedAt"))),
+                "refundStatus", statusValue(application.get("refundStatus"), refundCreatedAt),
+                "isCancelled", statusValue(
+                        application.get("isCancelled"),
+                        statusCreatedAtByField.get("event_applications.is_cancelled")),
+                "selectedStallId", statusValue(
+                        application.get("selectedStallId"),
+                        statusCreatedAtByField.get("event_applications.selected_stall_id")));
+    }
+
+    private Map<String, Object> statusCreatedAtByField(Map<String, Object> application) {
+        Long applicationId = toLong(application.get("applicationId"));
+        if (applicationId == null) {
+            return Map.of();
+        }
+
+        Map<String, Object> statusCreatedAtByField = new LinkedHashMap<>();
+        organizerRepository.findApplicationStatusLogs(applicationId)
+                .forEach(statusLog -> statusCreatedAtByField.put(
+                        normalizeText(statusLog.get("statusField")),
+                        statusLog.get("createdAt")));
+        return statusCreatedAtByField;
+    }
+
+    private Map<String, Object> statusValue(Object value, Object createdAt) {
+        return orderedMap(
+                "value", value,
+                "createdAt", formatDateTime(createdAt));
+    }
+
+    private Object firstPresent(Object... values) {
+        for (Object value : values) {
+            if (value != null) {
+                return value;
+            }
+        }
+        return null;
     }
 
     private Map<String, Object> getAuthenticatedOrganizer(String authorizationHeader) {
@@ -289,18 +291,25 @@ public class OrganizerService {
         return start.format(SERVICE_TIME_FORMATTER) + "-" + end.format(SERVICE_TIME_FORMATTER);
     }
 
-    private String formatEventTime(Map<String, Object> application) {
+    private String formatEventDate(Map<String, Object> application) {
         LocalDateTime startAt = toLocalDateTime(application.get("eventStartAt"));
         LocalDateTime endAt = toLocalDateTime(application.get("eventEndAt"));
         if (startAt == null || endAt == null) {
             return null;
         }
-        return startAt.format(DISPLAY_DATE_TIME_FORMATTER) + " - " + endAt.format(DISPLAY_DATE_TIME_FORMATTER);
+        String startDate = startAt.format(DISPLAY_DATE_FORMATTER);
+        String endDate = endAt.format(DISPLAY_DATE_FORMATTER);
+        return startDate.equals(endDate) ? startDate : startDate + " - " + endDate;
     }
 
     private String formatAppliedAt(Map<String, Object> application) {
         LocalDateTime appliedAt = appliedAtForSort(application);
         return appliedAt == null ? null : appliedAt.format(DISPLAY_DATE_TIME_FORMATTER);
+    }
+
+    private String formatDateTime(Object value) {
+        LocalDateTime dateTime = toLocalDateTime(value);
+        return dateTime == null ? null : dateTime.format(DISPLAY_DATE_TIME_FORMATTER);
     }
 
     private String normalizeText(Object value) {
@@ -386,6 +395,21 @@ public class OrganizerService {
             }
             return LocalDateTime.parse(text);
         } catch (DateTimeParseException exception) {
+            return null;
+        }
+    }
+
+    private Long toLong(Object value) {
+        if (value instanceof Number number) {
+            return number.longValue();
+        }
+        String text = normalizeText(value);
+        if (text == null) {
+            return null;
+        }
+        try {
+            return Long.valueOf(text);
+        } catch (NumberFormatException exception) {
             return null;
         }
     }

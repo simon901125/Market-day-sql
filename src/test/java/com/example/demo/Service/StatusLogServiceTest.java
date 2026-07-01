@@ -1,0 +1,213 @@
+package com.example.demo.Service;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+
+import java.nio.charset.StandardCharsets;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.stream.Stream;
+
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.MethodSource;
+import org.mockito.ArgumentCaptor;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.springframework.mock.web.MockHttpServletRequest;
+import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.web.context.request.RequestContextHolder;
+import org.springframework.web.context.request.ServletRequestAttributes;
+import org.springframework.web.util.ContentCachingRequestWrapper;
+
+import com.example.demo.Repository.StallRepository;
+import com.example.demo.Repository.StatusLogRepository;
+import com.example.demo.Repository.UserRepository;
+import com.example.demo.dto.log.StatusLogEntry;
+import com.example.demo.dto.response.ApiResponse;
+import com.example.demo.dto.response.LoginResponse;
+import com.example.demo.dto.response.LoginUserResponse;
+import com.fasterxml.jackson.databind.ObjectMapper;
+
+@ExtendWith(MockitoExtension.class)
+class StatusLogServiceTest {
+
+    @Mock
+    private StatusLogRepository statusLogRepository;
+
+    @Mock
+    private StallRepository stallRepository;
+
+    @Mock
+    private UserRepository userRepository;
+
+    @Mock
+    private JwtService jwtService;
+
+    private ObjectMapper objectMapper = new ObjectMapper();
+
+    @InjectMocks
+    private StatusLogService statusLogService;
+
+    @BeforeEach
+    void setUp() {
+        RequestContextHolder.resetRequestAttributes();
+        ReflectionTestUtils.setField(statusLogService, "objectMapper", objectMapper);
+    }
+
+    @AfterEach
+    void tearDown() {
+        RequestContextHolder.resetRequestAttributes();
+    }
+
+    @Test
+    void stallSelectionRecordsStallStatusAndSelectedStallId() {
+        MockHttpServletRequest request = post("/api/stalls/select");
+        setApiResponse(ApiResponse.success("ok", null), request);
+        when(stallRepository.findSelectedStallApplication("MD001", "A01"))
+                .thenReturn(Optional.of(Map.of(
+                        "applicationId", 10L,
+                        "selectedStallId", 88L,
+                        "stallStatus", "SELECTED")));
+
+        ContentCachingRequestWrapper wrapper = cachedJsonRequest(
+                request,
+                """
+                        {"applicationNo":"MD001","stallNo":"A01"}
+                        """);
+
+        statusLogService.recordForRequest(1L, wrapper);
+
+        List<StatusLogEntry> entries = capturedEntries();
+        assertThat(entries).extracting(StatusLogEntry::getTargetType)
+                .containsExactly("EVENT_STALL", "EVENT_APPLICATION");
+        assertThat(entries).extracting(StatusLogEntry::getStatusField)
+                .containsExactly("event_stalls.status", "event_applications.selected_stall_id");
+        assertThat(entries).extracting(StatusLogEntry::getNewStatus)
+                .containsExactly("SELECTED", "88");
+    }
+
+    @ParameterizedTest
+    @MethodSource("loginApis")
+    void loginApisRecordIsLogin(String path) {
+        MockHttpServletRequest request = post(path);
+        setApiResponse(ApiResponse.success(
+                "ok",
+                new LoginResponse(
+                        "jwt",
+                        new LoginUserResponse("vendor@example.test", "Vendor", "VENDOR", "ACTIVE", true))),
+                request);
+        when(userRepository.findProfileByEmail("vendor@example.test"))
+                .thenReturn(Optional.of(Map.of("id", 20L)));
+
+        statusLogService.recordForRequest(2L, request);
+
+        List<StatusLogEntry> entries = capturedEntries();
+        assertThat(entries).hasSize(1);
+        assertThat(entries.get(0).getTargetType()).isEqualTo("USER");
+        assertThat(entries.get(0).getTargetId()).isEqualTo(20L);
+        assertThat(entries.get(0).getStatusField()).isEqualTo("users.isLogin");
+        assertThat(entries.get(0).getNewStatus()).isEqualTo("true");
+    }
+
+    @Test
+    void logoutRecordsIsLoginZero() {
+        MockHttpServletRequest request = post("/api/auth/logout");
+        request.addHeader("Authorization", "Bearer token");
+        when(jwtService.extractTokenFromAuthorizationHeader("Bearer token")).thenReturn("token");
+        when(jwtService.getEmail("token")).thenReturn("vendor@example.test");
+        when(userRepository.findProfileByEmail("vendor@example.test"))
+                .thenReturn(Optional.of(Map.of("id", 20L)));
+
+        statusLogService.recordForRequest(3L, request);
+
+        List<StatusLogEntry> entries = capturedEntries();
+        assertThat(entries).hasSize(1);
+        assertThat(entries.get(0).getStatusField()).isEqualTo("users.isLogin");
+        assertThat(entries.get(0).getNewStatus()).isEqualTo("false");
+    }
+
+    @Test
+    void deactivateRecordsStatusAndIsLogin() {
+        MockHttpServletRequest request = post("/api/account/deactivate");
+        request.addHeader("Authorization", "Bearer token");
+        when(jwtService.extractTokenFromAuthorizationHeader("Bearer token")).thenReturn("token");
+        when(jwtService.getEmail("token")).thenReturn("vendor@example.test");
+        when(userRepository.findProfileByEmail("vendor@example.test"))
+                .thenReturn(Optional.of(Map.of("id", 20L)));
+
+        statusLogService.recordForRequest(4L, request);
+
+        List<StatusLogEntry> entries = capturedEntries();
+        assertThat(entries).extracting(StatusLogEntry::getStatusField)
+                .containsExactly("users.status", "users.isLogin");
+        assertThat(entries).extracting(StatusLogEntry::getNewStatus)
+                .containsExactly("DISABLED", "0");
+    }
+
+    @Test
+    void emailVerifyRecordsActiveStatus() {
+        MockHttpServletRequest request = post("/api/auth/createAccount/emailVerify");
+        when(userRepository.findProfileByEmail("vendor@example.test"))
+                .thenReturn(Optional.of(Map.of("id", 20L)));
+
+        ContentCachingRequestWrapper wrapper = cachedJsonRequest(
+                request,
+                """
+                        {"email":"vendor@example.test","code":"123456"}
+                        """);
+
+        statusLogService.recordForRequest(5L, wrapper);
+
+        List<StatusLogEntry> entries = capturedEntries();
+        assertThat(entries).hasSize(1);
+        assertThat(entries.get(0).getStatusField()).isEqualTo("users.status");
+        assertThat(entries.get(0).getNewStatus()).isEqualTo("ACTIVE");
+    }
+
+    private static Stream<String> loginApis() {
+        return Stream.of(
+                "/api/vendor/local-login",
+                "/api/organizer/local-login",
+                "/api/admin/local-login",
+                "/api/vendor/google-login",
+                "/api/organizer/google-login");
+    }
+
+    private MockHttpServletRequest post(String path) {
+        MockHttpServletRequest request = new MockHttpServletRequest("POST", path);
+        request.setCharacterEncoding(StandardCharsets.UTF_8.name());
+        return request;
+    }
+
+    private void setApiResponse(ApiResponse<?> apiResponse, MockHttpServletRequest request) {
+        request.setAttribute(RequestLogService.API_RESPONSE_ATTRIBUTE, apiResponse);
+        RequestContextHolder.setRequestAttributes(new ServletRequestAttributes(request));
+    }
+
+    private ContentCachingRequestWrapper cachedJsonRequest(MockHttpServletRequest request, String json) {
+        request.setContentType("application/json");
+        request.setContent(json.getBytes(StandardCharsets.UTF_8));
+        ContentCachingRequestWrapper wrapper = new ContentCachingRequestWrapper(request);
+        try {
+            wrapper.getInputStream().readAllBytes();
+        } catch (Exception exception) {
+            throw new IllegalStateException("Failed to cache request body", exception);
+        }
+        RequestContextHolder.setRequestAttributes(new ServletRequestAttributes(wrapper));
+        return wrapper;
+    }
+
+    private List<StatusLogEntry> capturedEntries() {
+        ArgumentCaptor<List<StatusLogEntry>> captor = ArgumentCaptor.forClass(List.class);
+        verify(statusLogRepository).createStatusLogs(any(), captor.capture());
+        return captor.getValue();
+    }
+}
