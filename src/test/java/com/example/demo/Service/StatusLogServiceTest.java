@@ -172,6 +172,40 @@ class StatusLogServiceTest {
         assertThat(entries.get(0).getNewStatus()).isEqualTo("ACTIVE");
     }
 
+    @Test
+    void organizerApplicationApproveRecordsApprovedStatus() {
+        MockHttpServletRequest request = post("/api/organizer/applications/10/approve");
+        ContentCachingRequestWrapper wrapper = cachedJsonRequest(request, "{}");
+
+        statusLogService.recordForRequest(6L, wrapper);
+
+        List<StatusLogEntry> entries = capturedEntries();
+        assertThat(entries).hasSize(1);
+        assertThat(entries.get(0).getTargetType()).isEqualTo("EVENT_APPLICATION");
+        assertThat(entries.get(0).getTargetId()).isEqualTo(10L);
+        assertThat(entries.get(0).getStatusField()).isEqualTo("event_applications.review_status");
+        assertThat(entries.get(0).getNewStatus()).isEqualTo("APPROVED");
+    }
+
+    @Test
+    void organizerApplicationRejectRecordsRejectedStatus() {
+        MockHttpServletRequest request = post("/api/organizer/applications/10/reject");
+        ContentCachingRequestWrapper wrapper = cachedJsonRequest(
+                request,
+                """
+                        {"reviewNote":"資料不完整","reviewNoteDetail":"請補上商品照片"}
+                        """);
+
+        statusLogService.recordForRequest(7L, wrapper);
+
+        List<StatusLogEntry> entries = capturedEntries();
+        assertThat(entries).hasSize(1);
+        assertThat(entries.get(0).getTargetType()).isEqualTo("EVENT_APPLICATION");
+        assertThat(entries.get(0).getTargetId()).isEqualTo(10L);
+        assertThat(entries.get(0).getStatusField()).isEqualTo("event_applications.review_status");
+        assertThat(entries.get(0).getNewStatus()).isEqualTo("REJECTED");
+    }
+
     private static Stream<String> loginApis() {
         return Stream.of(
                 "/api/vendor/local-login",

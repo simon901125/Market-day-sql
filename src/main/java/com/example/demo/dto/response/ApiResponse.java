@@ -131,10 +131,13 @@ public class ApiResponse<T> {
             case "Organizer account retrieved successfully" -> "\u4e3b\u8fa6\u65b9\u5e33\u865f\u8cc7\u6599\u53d6\u5f97\u6210\u529f";
             case "Organizer applications retrieved successfully" -> "\u4e3b\u8fa6\u65b9\u7533\u8acb\u5217\u8868\u53d6\u5f97\u6210\u529f";
             case "Organizer application detail retrieved successfully" -> "\u4e3b\u8fa6\u65b9\u7533\u8acb\u8a73\u60c5\u53d6\u5f97\u6210\u529f";
+            case "Organizer application reviewed successfully" -> "\u4e3b\u8fa6\u65b9\u7533\u8acb\u5be9\u6838\u6210\u529f";
             case "Stall selection successful" -> "\u6524\u4f4d\u9078\u64c7\u6210\u529f";
             case "Event stalls status retrieved successfully" -> "\u6d3b\u52d5\u6524\u4f4d\u72c0\u614b\u53d6\u5f97\u6210\u529f";
             case "Vendor account retrieved successfully" -> "\u6524\u4e3b\u5e33\u865f\u8cc7\u6599\u53d6\u5f97\u6210\u529f";
             case "Vendor stall map retrieved successfully" -> "\u6524\u4e3b\u9078\u4f4d\u5730\u5716\u53d6\u5f97\u6210\u529f";
+            case "Organizer stall map retrieved successfully" -> "\u4e3b\u8fa6\u65b9\u6524\u4f4d\u5730\u5716\u53d6\u5f97\u6210\u529f";
+            case "Organizer stall detail retrieved successfully" -> "\u4e3b\u8fa6\u65b9\u6524\u4f4d\u8cc7\u6599\u53d6\u5f97\u6210\u529f";
             default -> isLikelyEnglish(message) ? "\u64cd\u4f5c\u6210\u529f" : message;
         };
     }
@@ -175,7 +178,22 @@ public class ApiResponse<T> {
             case "Application does not belong to this account" -> "\u6b64\u7533\u8acb\u4e0d\u5c6c\u65bc\u76ee\u524d\u767b\u5165\u5e33\u865f";
             case "Application is not selectable for stall map" -> "\u6b64\u7533\u8acb\u76ee\u524d\u4e0d\u80fd\u67e5\u770b\u9078\u4f4d\u5730\u5716";
             case "Application is not approved, paid, or selectable" -> "\u6b64\u7533\u8acb\u5c1a\u672a\u901a\u904e\u5be9\u6838\u3001\u5c1a\u672a\u4ed8\u6b3e\u6216\u4e0d\u80fd\u9078\u4f4d";
+            case "Application review is pending" -> "此申請尚在審核中";
+            case "Application review was rejected" -> "此申請審核未通過";
+            case "Application is not approved" -> "此申請尚未通過審核";
+            case "Application payment is pending" -> "此申請尚未付款";
+            case "Application payment is not paid" -> "此申請付款狀態不可選位";
+            case "Application has already selected a stall" -> "此申請已完成選位";
+            case "Application status changed during stall selection" -> "申請狀態已變更，請重新整理後再試";
+            case "Event id is required" -> "\u8acb\u63d0\u4f9b\u6d3b\u52d5 ID";
+            case "Event not found" -> "\u627e\u4e0d\u5230\u6d3b\u52d5\u8cc7\u6599";
+            case "Stall not found" -> "\u627e\u4e0d\u5230\u6524\u4f4d\u8cc7\u6599";
             case "Application binding failed" -> "\u7533\u8acb\u7d81\u5b9a\u6524\u4f4d\u5931\u6557";
+            case "Review request is required" -> "\u8acb\u63d0\u4f9b\u5be9\u6838\u8cc7\u6599";
+            case "Review status is invalid" -> "\u5be9\u6838\u72c0\u614b\u7121\u6548";
+            case "Application has already been reviewed" -> "\u6b64\u7533\u8acb\u5df2\u5be9\u6838";
+            case "Application has been cancelled" -> "\u6b64\u7533\u8acb\u5df2\u53d6\u6d88";
+            case "Application review failed" -> "\u7533\u8acb\u5be9\u6838\u5931\u6557";
             case "Stall number is required" -> "\u8acb\u63d0\u4f9b\u6524\u4f4d\u7de8\u865f";
             case "Stall is not available" -> "\u6b64\u6524\u4f4d\u4e0d\u53ef\u9078\u64c7";
             case "Stall has already been selected" -> "\u6b64\u6524\u4f4d\u5df2\u88ab\u9078\u8d70";

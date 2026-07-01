@@ -11,8 +11,8 @@ import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.example.demo.Service.StallService;
-import com.example.demo.dto.response.ApiResponse;
 import com.example.demo.dto.request.StallSelectionRequest;
+import com.example.demo.dto.response.ApiResponse;
 import com.example.demo.dto.response.EventStallStatusResponse;
 import com.example.demo.dto.response.StallSelectionResponse;
 import com.example.demo.dto.response.VendorAccountResponse;
@@ -29,7 +29,7 @@ public class StallController {
     @Autowired
     private StallService stallService;
 
-    @Operation(summary = "選擇活動攤位", description = "依 applicationNo 查出申請單與活動，再用 stallNo 選擇該活動的 AVAILABLE 攤位。")
+    @Operation(summary = "選擇活動攤位", description = "依 applicationNo 取得申請活動，並以 stallNo 選擇狀態為 AVAILABLE 的攤位。")
     @PostMapping("/api/stalls/select")
     public ApiResponse<StallSelectionResponse> selectEventStall(
             @RequestHeader(value = "Authorization", required = false) String authorizationHeader,

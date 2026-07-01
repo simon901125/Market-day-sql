@@ -18,6 +18,74 @@ Request body 使用 `dto/request` 內的 Request DTO，Response data 使用 `dto
 }
 ```
 
+## 2026-07-01 更新：Organizer 報名審核 API
+
+主辦方報名審核拆成兩支 API：
+
+```http
+POST /api/organizer/applications/{id}/approve
+POST /api/organizer/applications/{id}/reject
+```
+
+### 審核通過
+
+`POST /api/organizer/applications/{id}/approve`
+
+- 需要 `Authorization` header。
+- 不需要 request body。
+- 成功後會將 `event_applications.review_status` 更新為 `APPROVED`。
+- `status_logs` 會記錄 `target_type = EVENT_APPLICATION`、`status_field = event_applications.review_status`、`new_status = APPROVED`。
+
+### 審核不通過
+
+`POST /api/organizer/applications/{id}/reject`
+
+- 需要 `Authorization` header。
+- `reviewNote`、`reviewNoteDetail` 皆非必填。
+- 成功後會將 `event_applications.review_status` 更新為 `REJECTED`。
+- 不變更 SQL 結構，退件原因會以 JSON 字串存入 `event_applications.review_note`。
+
+Request body:
+
+```json
+{
+  "reviewNote": "資料不完整",
+  "reviewNoteDetail": "請補上商品照片"
+}
+```
+
+DB `event_applications.review_note` 儲存格式：
+
+```json
+{"reviewNote":"資料不完整","reviewNoteDetail":"請補上商品照片"}
+```
+
+Response data:
+
+```json
+{
+  "applicationId": 101,
+  "applicationNo": "T2-ORDER-3",
+  "reviewStatus": "REJECTED",
+  "reviewNote": "資料不完整",
+  "reviewNoteDetail": "請補上商品照片"
+}
+```
+
+`GET /api/organizer/applications/{id}` 的 `data.application` 會解析 `event_applications.review_note`，回傳：
+
+```json
+{
+  "applicationId": 101,
+  "applicationNo": "T2-ORDER-3",
+  "applicationStatus": "審核未通過",
+  "reviewNote": "資料不完整",
+  "reviewNoteDetail": "請補上商品照片"
+}
+```
+
+若 `review_note` 是舊版純文字資料，API 會將純文字放在 `reviewNote`，並讓 `reviewNoteDetail` 為 `null`。
+
 | 欄位 | 型別 | 說明 |
 | --- | --- | --- |
 | `statusCode` | number | 成功通常為 `200`，一般錯誤為 `400`，JWT 驗證失敗為 `401`。 |
@@ -77,6 +145,7 @@ Request body 使用 `dto/request` 內的 Request DTO，Response data 使用 `dto
 `POST /api/stalls/select`
 
 Request body 只需要 `applicationNo` 與 `stallNo`，`eventId` 由後端依申請單查出。
+`applicationNo` 與 `stallNo` 目前只檢查必填，不限制編號格式。
 
 ```json
 {
@@ -99,12 +168,32 @@ Request body 只需要 `applicationNo` 與 `stallNo`，`eventId` 由後端依申
 }
 ```
 
+錯誤訊息會拆分為申請單狀態問題與攤位選位機制問題。
+
+申請單狀態問題：
+
+- `找不到申請資料`
+- `此申請不屬於目前登入帳號`
+- `此申請已取消`
+- `此申請尚在審核中`
+- `此申請審核未通過`
+- `此申請尚未通過審核`
+- `此申請尚未付款`
+- `此申請付款狀態不可選位`
+- `此申請已完成選位`
+
+攤位選位機制問題：
+
+- `找不到攤位資料`
+- `此攤位不可選擇`
+- `此攤位已被選走`
+
 並發搶位失敗時會回：
 
 ```json
 {
   "statusCode": 400,
-  "message": "搶位失敗，該位置已被選擇",
+  "message": "此攤位已被選走",
   "messageDetails": null,
   "data": null
 }

@@ -181,6 +181,8 @@ Bearer <JWT_TOKEN>
 | GET | `/api/organizer/account` |
 | GET | `/api/organizer/applications/search` |
 | GET | `/api/organizer/applications/{id}` |
+| POST | `/api/organizer/applications/{id}/approve` |
+| POST | `/api/organizer/applications/{id}/reject` |
 
 公開 API 例如註冊、登入、Email 驗證、忘記密碼、重設密碼與攤位狀態查詢，不放在 `protectedApis`。
 
@@ -231,9 +233,13 @@ Bearer <JWT_TOKEN>
 
 - `eventId` 不由前端傳入，後端會由 `applicationNo` 查出申請單所屬活動。
 - 需要 JWT，且登入者必須是 `VENDOR`。
+- `applicationNo` 與 `stallNo` 只檢查必填，不限制編號格式。
 - 申請單必須屬於目前登入攤主。
 - 申請單必須已審核通過、已付款、尚未選位。
-- 選位時會先把攤位從 `AVAILABLE` 更新為 `SELECTED`，搶位失敗會回 `搶位失敗，該位置已被選擇`。
+- 選位時會先把攤位從 `AVAILABLE` 更新為 `SELECTED`，搶位失敗會回 `此攤位已被選走`。
+- 錯誤訊息已拆分為申請單狀態問題與攤位選位機制問題：
+  - 申請單狀態：找不到申請資料、非本人申請、已取消、尚在審核中、審核未通過、尚未通過審核、尚未付款、付款狀態不可選位、已完成選位。
+  - 攤位機制：找不到攤位資料、攤位不可選擇、攤位已被選走。
 
 #### 攤位地圖 API
 
@@ -307,3 +313,41 @@ Bearer <JWT_TOKEN>
 - 新增 request body 時，請建立或更新 `dto/request`。
 - 新增 response data 時，請建立或更新 `dto/response`。
 - 錯誤訊息請透過 `ApiResponse.fail(...)` 回傳，讓前端收到中文錯誤訊息。
+
+## 2026-07-01 更新：Organizer 報名審核 API
+
+JWT protected APIs 已新增：
+
+| Method | API |
+| --- | --- |
+| POST | `/api/organizer/applications/{id}/approve` |
+| POST | `/api/organizer/applications/{id}/reject` |
+
+### 審核通過
+
+`POST /api/organizer/applications/{id}/approve`
+
+- 需要 `Authorization` header。
+- `id` 放在 path params。
+- 不需要 request body。
+- 成功後更新 `event_applications.review_status = APPROVED`。
+
+### 審核不通過
+
+`POST /api/organizer/applications/{id}/reject`
+
+- 需要 `Authorization` header。
+- `id` 放在 path params。
+- Request DTO: `OrganizerApplicationReviewRequest`。
+- `reviewNote`、`reviewNoteDetail` 皆非必填。
+- 成功後更新 `event_applications.review_status = REJECTED`。
+- 退件原因會以 JSON 字串存入 `event_applications.review_note`，不新增 SQL 欄位。
+
+Request body:
+
+```json
+{
+  "reviewNote": "資料不完整",
+  "reviewNoteDetail": "請補上商品照片"
+}
+```

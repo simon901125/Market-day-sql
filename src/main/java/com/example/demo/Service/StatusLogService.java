@@ -52,7 +52,13 @@ public class StatusLogService {
             new StatusLogApi(HttpMethod.POST.name(), "/api/organizer/google-login", this::buildLoginLogs),
             new StatusLogApi(HttpMethod.POST.name(), "/api/auth/logout", this::buildLogoutLogs),
             new StatusLogApi(HttpMethod.POST.name(), "/api/account/deactivate", this::buildDeactivateLogs),
-            new StatusLogApi(HttpMethod.POST.name(), "/api/auth/createAccount/emailVerify", this::buildEmailVerifyLogs));
+            new StatusLogApi(HttpMethod.POST.name(), "/api/auth/createAccount/emailVerify", this::buildEmailVerifyLogs),
+            new StatusLogApi(HttpMethod.POST.name(), "/api/organizer/applications/{id}/approve",
+                    (requestLogId, request) -> buildOrganizerApplicationReviewLogs(
+                            requestLogId, request, "/approve", "APPROVED")),
+            new StatusLogApi(HttpMethod.POST.name(), "/api/organizer/applications/{id}/reject",
+                    (requestLogId, request) -> buildOrganizerApplicationReviewLogs(
+                            requestLogId, request, "/reject", "REJECTED")));
 
     public void recordForRequest(Long requestLogId, HttpServletRequest request) {
         if (requestLogId == null || request == null) {
@@ -134,6 +140,20 @@ public class StatusLogService {
 
         Long userId = findUserIdByEmail(body.getEmail());
         return validEntries(List.of(entry(requestLogId, "USER", userId, "users.status", "ACTIVE")));
+    }
+
+    private List<StatusLogEntry> buildOrganizerApplicationReviewLogs(
+            Long requestLogId,
+            HttpServletRequest request,
+            String suffix,
+            String reviewStatus) {
+        Long applicationId = pathId(request.getRequestURI(), "/api/organizer/applications/", suffix);
+        return validEntries(List.of(entry(
+                requestLogId,
+                "EVENT_APPLICATION",
+                applicationId,
+                "event_applications.review_status",
+                reviewStatus)));
     }
 
     private StatusLogEntry entry(Long requestLogId, String targetType, Long targetId, String statusField, Object newStatus) {
@@ -226,6 +246,14 @@ public class StatusLogService {
         }
         String regex = "^" + pattern.replaceAll("\\{[^/]+\\}", "[^/]+") + "$";
         return path.matches(regex);
+    }
+
+    private Long pathId(String path, String prefix, String suffix) {
+        if (path == null || !path.startsWith(prefix) || !path.endsWith(suffix)) {
+            return null;
+        }
+        String id = path.substring(prefix.length(), path.length() - suffix.length());
+        return toLong(id);
     }
 
     private record StatusLogApi(String method, String path, StatusLogEntryBuilder entryBuilder) {
