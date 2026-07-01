@@ -7,8 +7,11 @@ import org.springframework.http.converter.StringHttpMessageConverter;
 import org.springframework.http.server.ServerHttpRequest;
 import org.springframework.http.server.ServerHttpResponse;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.context.request.RequestAttributes;
+import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.servlet.mvc.method.annotation.ResponseBodyAdvice;
 
+import com.example.demo.Service.RequestLogService;
 import com.example.demo.dto.response.ApiResponse;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -43,11 +46,13 @@ public class GlobalResponseAdvice implements ResponseBodyAdvice<Object> {
 
         if (body instanceof ApiResponse<?> apiResponse) {
             fillSuccessMessageDetails(apiResponse, request);
+            setResponseAttributes(apiResponse);
             return body;
         }
 
         ApiResponse<Object> wrappedBody = ApiResponse.fromLegacy(body, "Success");
         fillSuccessMessageDetails(wrappedBody, request);
+        setResponseAttributes(wrappedBody);
         if (StringHttpMessageConverter.class.isAssignableFrom(selectedConverterType)) {
             response.getHeaders().setContentType(MediaType.APPLICATION_JSON);
             try {
@@ -68,5 +73,19 @@ public class GlobalResponseAdvice implements ResponseBodyAdvice<Object> {
         String method = request.getMethod().name();
         String path = request.getURI().getPath();
         apiResponse.setMessageDetails("Executed API: " + method + " " + path);
+    }
+
+    private void setResponseAttributes(ApiResponse<?> apiResponse) {
+        RequestAttributes requestAttributes = RequestContextHolder.getRequestAttributes();
+        if (requestAttributes != null) {
+            requestAttributes.setAttribute(
+                    RequestLogService.RESPONSE_STATUS_CODE_ATTRIBUTE,
+                    apiResponse.getStatusCode(),
+                    RequestAttributes.SCOPE_REQUEST);
+            requestAttributes.setAttribute(
+                    RequestLogService.API_RESPONSE_ATTRIBUTE,
+                    apiResponse,
+                    RequestAttributes.SCOPE_REQUEST);
+        }
     }
 }

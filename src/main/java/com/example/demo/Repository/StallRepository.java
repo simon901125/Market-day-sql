@@ -125,6 +125,25 @@ public class StallRepository {
         return namedParameterJdbcTemplate.update(sql, map);
     }
 
+    public Optional<Map<String, Object>> findSelectedStallApplication(String applicationNo, String stallNo) {
+        String sql = """
+                SELECT
+                    a.id AS applicationId,
+                    a.selected_stall_id AS selectedStallId,
+                    s.status AS stallStatus
+                FROM dbo.event_applications a
+                INNER JOIN dbo.event_stalls s ON s.id = a.selected_stall_id
+                WHERE a.application_no = :applicationNo
+                  AND s.stall_no = :stallNo
+                """;
+
+        Map<String, Object> map = new HashMap<>();
+        map.put("applicationNo", applicationNo);
+        map.put("stallNo", stallNo);
+
+        return RepositoryResultMapper.normalizeOptional(namedParameterJdbcTemplate.queryForList(sql, map).stream().findFirst());
+    }
+
     public Optional<Map<String, Object>> findVendorStallMapApplication(String applicationNo) {
         String sql = """
                 SELECT

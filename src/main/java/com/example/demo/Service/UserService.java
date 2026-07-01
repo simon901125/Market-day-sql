@@ -17,7 +17,10 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.example.demo.Repository.RequestLogRepository;
+import com.example.demo.Repository.StatusLogRepository;
 import com.example.demo.Repository.UserRepository;
+import com.example.demo.dto.log.StatusLogEntry;
 import com.example.demo.dto.response.ApiResponse;
 import com.example.demo.dto.request.EmailVerificationRequest;
 import com.example.demo.dto.request.GoogleCredentialRequest;
@@ -38,6 +41,12 @@ public class UserService {
 
     @Autowired
     private UserRepository userRepository;
+
+    @Autowired
+    private RequestLogRepository requestLogRepository;
+
+    @Autowired
+    private StatusLogRepository statusLogRepository;
 
     @Autowired
     private AuthService authService;
@@ -213,7 +222,24 @@ public class UserService {
 
     @Scheduled(fixedRate = 60_000)
     public void autoLogout() {
-        userRepository.autoLogoutExpiredUsers();
+        userRepository.autoLogoutExpiredUsersAndReturnIds()
+                .forEach(this::recordAutoLogoutStatus);
+    }
+
+    private void recordAutoLogoutStatus(Long userId) {
+        Long requestLogId = requestLogRepository.createRequestLog(
+                null,
+                "SYSTEM",
+                "AUTO_LOGOUT_EXPIRED_USERS",
+                200);
+        statusLogRepository.createStatusLogs(
+                requestLogId,
+                List.of(new StatusLogEntry(
+                        requestLogId,
+                        "USER",
+                        userId,
+                        "users.isLogin",
+                        "false")));
     }
 
     public ApiResponse<UserProfileResponse> getCurrentUser(String authorizationHeader) {

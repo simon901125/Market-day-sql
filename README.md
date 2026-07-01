@@ -6,6 +6,16 @@ Market Day 後端 API 專案，使用 Spring Boot 建置，包含帳號註冊、
 
 > 更新日誌請依日期與 branch 分區：日期使用 `###`，branch 使用 `####`，避免不同分支的更動混在同一段。
 
+### 2026-07-01
+
+#### simon branch
+
+- 新增 API 請求紀錄流程：`RequestLoggingFilter` 只記錄會異動資料的 API，並透過 `request_logs.status_code` 保存實際回傳結果。
+- 新增 `status_logs` 寫入流程，將狀態異動集中在 `StatusLogService` 規則表中處理，支援登入、登出、停用帳號、Email 驗證與選位狀態紀錄。
+- `GET /api/organizer/applications/{id}` 的 `status` 回傳改為包含 `value` 與 `createdAt`，時間優先來自 `status_logs` 關聯的 `request_logs.created_at`。
+- 自動登出排程會以 `SYSTEM / AUTO_LOGOUT_EXPIRED_USERS` 寫入 `request_logs`，並為被登出的使用者寫入 `users.isLogin = false` 的 `status_logs`。
+- 新增 `StatusLogServiceTest`，覆蓋目前所有 status log API 規則與自動產生的狀態紀錄內容。
+
 ### 2026-06-29
 
 #### simon branch

@@ -249,6 +249,24 @@ public class OrganizerRepository {
         return RepositoryResultMapper.normalizeOptional(namedParameterJdbcTemplate.queryForList(sql, map).stream().findFirst());
     }
 
+    public List<Map<String, Object>> findApplicationStatusLogs(Long applicationId) {
+        String sql = """
+                SELECT
+                    sl.status_field AS statusField,
+                    sl.new_status AS newStatus,
+                    rl.created_at AS createdAt
+                FROM dbo.status_logs sl
+                INNER JOIN dbo.request_logs rl ON rl.id = sl.request_log_id
+                WHERE sl.target_type = N'EVENT_APPLICATION'
+                  AND sl.target_id = :applicationId
+                ORDER BY rl.created_at ASC, sl.id ASC
+                """;
+
+        Map<String, Object> map = new HashMap<>();
+        map.put("applicationId", applicationId);
+        return RepositoryResultMapper.normalizeList(namedParameterJdbcTemplate.queryForList(sql, map));
+    }
+
     private String normalizeText(String value) {
         if (value == null) {
             return null;
