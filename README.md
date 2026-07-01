@@ -10,6 +10,11 @@ Market Day 後端 API 專案，使用 Spring Boot 建置，包含帳號註冊、
 
 #### simon branch
 
+- `GET /api/organizer/applications/{id}` 回傳補上租借設備資料 `equipmentRentals`，並讓費用區塊使用實際租借明細加總。
+- `GET /api/organizer/applications/{id}` 的 `status` 改為固定狀態流清單，包含報名、審核、取消、付款、退款申請、退款審核、已退款、選位、保證金退還；未到達的節點回傳 `value: null` 與 `createdAt: null`。
+- `GET /api/organizer/applications/{id}` 的 `fee` 補上 `stallFeeNote`、`rentalFee`、`rentalFeeNote`、`depositNote`，移除重複的 `items` 結構，方便前端直接顯示報名費用明細。
+- `ApiResponse.success(...)` 與 `ApiResponse.fail(...)` 訊息統一轉為中文；未列入 mapping 的英文成功訊息會 fallback 為 `操作成功`。
+
 - 新增 API 請求紀錄流程：`RequestLoggingFilter` 只記錄會異動資料的 API，並透過 `request_logs.status_code` 保存實際回傳結果。
 - 新增 `status_logs` 寫入流程，將狀態異動集中在 `StatusLogService` 規則表中處理，支援登入、登出、停用帳號、Email 驗證與選位狀態紀錄。
 - `GET /api/organizer/applications/{id}` 的 `status` 回傳改為包含 `value` 與 `createdAt`，時間優先來自 `status_logs` 關聯的 `request_logs.created_at`。
