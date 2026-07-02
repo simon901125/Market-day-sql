@@ -6,6 +6,16 @@
 
 > 更新日誌請依日期與 branch 分區：日期使用 `###`，branch 使用 `####`，越近的更新放越上面，避免不同分支的更動混在同一段。
 
+### 2026-07-02
+
+#### simon branch
+
+- 選位資料由 `event_applications.selected_stall_id` 改為 `application_dates.selected_stall_id`，支援同一筆申請單在不同報名日期選擇不同攤位。
+- `application_dates.selected_stall_id` 新增對 `event_stalls.id` 的關聯，並以同日同攤位唯一限制避免同一天重複選位。
+- `event_stalls.status` 保留為攤位本體狀態，只表示攤位是否可用；每日是否被選走改由 `application_dates.selected_stall_id` 搭配 `apply_date` 判斷。
+- `test4.sql` 更新 `MD0101` 多日期選位測資：活動日期為 `2026-08-01` 至 `2026-08-03`，`vendor1` 報名第 1-2 天，`vendor2` 報名第 2-3 天，`vendor3` 至 `vendor12` 三天皆有選位資料。
+- 若需重建乾淨測試資料，可依序執行 `MarketDayDB.sql`、`clear.sql`、`test4.sql`；若只需重匯 `MD0101` 測資，可執行 `clear.sql` 後再執行 `test4.sql`。
+
 ### 2026-06-30
 
 #### simon branch
@@ -88,9 +98,9 @@
 - `event_unpublish_requests`：活動下架申請，記錄主辦方申請原因與管理員審核結果
 - `event_images`：活動圖片
 - `event_stall_zones`：活動攤位分區
-- `event_stalls`：活動攤位，可記錄攤位尺寸、編號與選位狀態
-- `event_applications`：攤主活動報名，包含選擇攤位、保證金、報名審核備註與報名建立時間
-- `application_dates`：報名參加日期，一筆報名可選擇活動中的多個日期
+- `event_stalls`：活動攤位，可記錄攤位尺寸、編號與攤位本體狀態
+- `event_applications`：攤主活動報名，包含保證金、報名審核備註與報名建立時間
+- `application_dates`：報名參加日期，一筆報名可選擇活動中的多個日期，並在每個日期記錄選擇的攤位
 - `payments`：付款紀錄
 - `refunds`：退款紀錄，關聯報名與原付款紀錄
 - `notifications`：通知，包含未讀/已讀狀態
@@ -179,7 +189,7 @@ spring.datasource.url=jdbc:sqlserver://localhost:1433;databaseName=MarketDayDB;e
 - Swagger schema 是否需要同步更新
 - `test.sql`、`test3.sql` 是否需要補測試資料或調整欄位名稱
 
-近期 schema 已調整 `users` 的自動登出與更新時間欄位，並將品牌/主辦方詳細資料拆成 `user_profiles`、`vendor_profiles`、`organizer_profiles`。若後端開始實作這些功能，需同步檢查相關 Entity / DTO / API 文件是否已包含 `expired_time`、`user_profiles`、`vendor_profiles`、`organizer_profiles`、`vendor_profile_id`、`review_status`、`review_note`、`selected_stall_id`、`deposit_amount`、`deposit_status`、`event_stalls`、`refunds`、`event_unpublish_requests` 與 `admin_operation_logs`。
+近期 schema 已調整 `users` 的自動登出與更新時間欄位，並將品牌/主辦方詳細資料拆成 `user_profiles`、`vendor_profiles`、`organizer_profiles`。若後端開始實作這些功能，需同步檢查相關 Entity / DTO / API 文件是否已包含 `expired_time`、`user_profiles`、`vendor_profiles`、`organizer_profiles`、`vendor_profile_id`、`review_status`、`review_note`、`application_dates.selected_stall_id`、`deposit_amount`、`deposit_status`、`event_stalls`、`refunds`、`event_unpublish_requests` 與 `admin_operation_logs`。
 
 若變更 `users` 欄位，請特別檢查：
 
