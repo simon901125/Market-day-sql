@@ -320,7 +320,7 @@ CREATE TABLE dbo.event_stalls
     CONSTRAINT UQ_event_stalls_event_stall_no UNIQUE (event_id, stall_no),
     CONSTRAINT FK_event_stalls_market_events FOREIGN KEY (event_id) REFERENCES dbo.market_events(id),
     CONSTRAINT FK_event_stalls_event_stall_zones FOREIGN KEY (zone_id) REFERENCES dbo.event_stall_zones(id),
-    CONSTRAINT CK_event_stalls_status CHECK (status IN (N'AVAILABLE', N'SELECTED', N'ASSIGNED', N'DISABLED'))
+    CONSTRAINT CK_event_stalls_status CHECK (status IN (N'AVAILABLE', N'ASSIGNED', N'DISABLED'))
 );
 GO
 
@@ -357,7 +357,6 @@ CREATE TABLE dbo.event_applications
     event_id BIGINT NOT NULL,
     user_id BIGINT NOT NULL,
     vendor_profile_id BIGINT NOT NULL,
-    selected_stall_id BIGINT NULL,
     vehicle_no NVARCHAR(30) NULL,
     applicant_note NVARCHAR(MAX) NULL,
     total_amount DECIMAL(10,2) NOT NULL,
@@ -375,7 +374,6 @@ CREATE TABLE dbo.event_applications
     CONSTRAINT FK_event_applications_market_events FOREIGN KEY (event_id) REFERENCES dbo.market_events(id),
     CONSTRAINT FK_event_applications_users FOREIGN KEY (user_id) REFERENCES dbo.users(id),
     CONSTRAINT FK_event_applications_vendor_profiles FOREIGN KEY (vendor_profile_id) REFERENCES dbo.vendor_profiles(id),
-    CONSTRAINT FK_event_applications_event_stalls FOREIGN KEY (selected_stall_id) REFERENCES dbo.event_stalls(id),
     CONSTRAINT CK_event_applications_review_status CHECK (review_status IN (N'PENDING', N'APPROVED', N'REJECTED')),
     CONSTRAINT CK_event_applications_deposit_status CHECK (deposit_status IN (N'NOT_RETURNED', N'RETURNED')),
     CONSTRAINT CK_event_applications_payment_status CHECK (payment_status IN (N'PENDING', N'PAID', N'FAILED', N'EXPIRED'))
@@ -384,7 +382,6 @@ GO
 
 CREATE INDEX IX_event_applications_event_review ON dbo.event_applications(event_id, review_status);
 CREATE INDEX IX_event_applications_user ON dbo.event_applications(user_id);
-CREATE INDEX IX_event_applications_selected_stall ON dbo.event_applications(selected_stall_id);
 CREATE INDEX IX_event_applications_payment_due ON dbo.event_applications(payment_status, payment_due_at);
 CREATE INDEX IX_event_applications_cancelled ON dbo.event_applications(is_cancelled);
 CREATE INDEX IX_event_applications_created ON dbo.event_applications(created_at);
@@ -436,13 +433,19 @@ CREATE TABLE dbo.application_dates
     id BIGINT IDENTITY(1,1) NOT NULL,
     application_id BIGINT NOT NULL,
     apply_date DATE NOT NULL,
+    selected_stall_id BIGINT NULL,
     CONSTRAINT PK_application_dates PRIMARY KEY (id),
     CONSTRAINT UQ_application_dates_application_date UNIQUE (application_id, apply_date),
-    CONSTRAINT FK_application_dates_event_applications FOREIGN KEY (application_id) REFERENCES dbo.event_applications(id)
+    CONSTRAINT FK_application_dates_event_applications FOREIGN KEY (application_id) REFERENCES dbo.event_applications(id),
+    CONSTRAINT FK_application_dates_event_stalls FOREIGN KEY (selected_stall_id) REFERENCES dbo.event_stalls(id)
 );
 GO
 
 CREATE INDEX IX_application_dates_apply_date ON dbo.application_dates(apply_date);
+CREATE INDEX IX_application_dates_selected_stall ON dbo.application_dates(selected_stall_id);
+CREATE UNIQUE INDEX UX_application_dates_apply_date_selected_stall
+ON dbo.application_dates(apply_date, selected_stall_id)
+WHERE selected_stall_id IS NOT NULL;
 GO
 
 CREATE TABLE dbo.payments
@@ -787,7 +790,6 @@ EXEC dbo.usp_add_column_description N'event_applications', N'application_no', N'
 EXEC dbo.usp_add_column_description N'event_applications', N'event_id', N'活動 ID';
 EXEC dbo.usp_add_column_description N'event_applications', N'user_id', N'攤主 ID';
 EXEC dbo.usp_add_column_description N'event_applications', N'vendor_profile_id', N'攤主品牌資料 ID';
-EXEC dbo.usp_add_column_description N'event_applications', N'selected_stall_id', N'選擇的活動攤位';
 EXEC dbo.usp_add_column_description N'event_applications', N'vehicle_no', N'車牌';
 EXEC dbo.usp_add_column_description N'event_applications', N'applicant_note', N'攤主備註';
 EXEC dbo.usp_add_column_description N'event_applications', N'total_amount', N'試算總金額';
@@ -818,6 +820,7 @@ EXEC dbo.usp_add_column_description N'rental_appliances', N'wattage', N'電器�
 EXEC dbo.usp_add_column_description N'application_dates', N'id', N'ID';
 EXEC dbo.usp_add_column_description N'application_dates', N'application_id', N'報名 ID';
 EXEC dbo.usp_add_column_description N'application_dates', N'apply_date', N'報名參加日期';
+EXEC dbo.usp_add_column_description N'application_dates', N'selected_stall_id', N'報名日期選擇的活動攤位';
 
 EXEC dbo.usp_add_column_description N'payments', N'id', N'付款 ID';
 EXEC dbo.usp_add_column_description N'payments', N'payment_no', N'付款編號';
