@@ -20,6 +20,7 @@ import com.example.demo.dto.response.MapBackedResponse;
 import com.example.demo.dto.response.OrganizerAccountResponse;
 import com.example.demo.dto.response.OrganizerApplicationDetailResponse;
 import com.example.demo.dto.response.OrganizerApplicationSearchResponse;
+import com.example.demo.dto.response.OrganizerAccountingSearchResponse;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -33,6 +34,22 @@ public class OrganizerController {
 
     @Autowired
     private StallService stallService;
+
+    @Operation(summary = "查詢主辦方帳務列表", description = "未輸入條件時回傳目前主辦方發起的所有活動帳務，有條件時依活動名稱、發布狀態與活動日期篩選。")
+    @GetMapping("/api/organizer/accounts/search")
+    public ApiResponse<OrganizerAccountingSearchResponse> searchOrganizerAccounts(
+            @RequestHeader(value = "Authorization", required = false) String authorizationHeader,
+            @RequestParam(value = "eventTitle", required = false) String eventTitle,
+            @RequestParam(value = "status", required = false) String status,
+            @RequestParam(value = "event_start_at", required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate eventStartAt,
+            @RequestParam(value = "event_end_at", required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate eventEndAt) {
+        return organizerService.searchOrganizerAccounts(
+                authorizationHeader,
+                eventTitle,
+                status,
+                eventStartAt,
+                eventEndAt);
+    }
 
     @Operation(summary = "取得主辦方帳號資訊", description = "回傳目前登入主辦方的主辦方名稱、聯絡資訊、公司資訊、地址與服務時間。")
     @GetMapping("/api/organizer/account")
@@ -88,8 +105,9 @@ public class OrganizerController {
     @GetMapping("/api/organizer/stall-map/{eventId}")
     public ApiResponse<MapBackedResponse> getOrganizerStallMap(
             @RequestHeader(value = "Authorization", required = false) String authorizationHeader,
-            @PathVariable Long eventId) {
-        return stallService.getOrganizerStallMap(authorizationHeader, eventId);
+            @PathVariable Long eventId,
+            @RequestParam(value = "applyDate", required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate applyDate) {
+        return stallService.getOrganizerStallMap(authorizationHeader, eventId, applyDate);
     }
 
     @Operation(summary = "取得主辦方攤位登記資料", description = "依 eventId 與 stallNo 取得攤位資訊；若已被登記，會回傳攤商與申請資料。")
@@ -97,7 +115,8 @@ public class OrganizerController {
     public ApiResponse<MapBackedResponse> getOrganizerStallMapDetail(
             @RequestHeader(value = "Authorization", required = false) String authorizationHeader,
             @PathVariable Long eventId,
-            @PathVariable String stallNo) {
-        return stallService.getOrganizerStallMapDetail(authorizationHeader, eventId, stallNo);
+            @PathVariable String stallNo,
+            @RequestParam(value = "applyDate", required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate applyDate) {
+        return stallService.getOrganizerStallMapDetail(authorizationHeader, eventId, stallNo, applyDate);
     }
 }

@@ -34,6 +34,7 @@ import com.example.demo.dto.log.StatusLogEntry;
 import com.example.demo.dto.response.ApiResponse;
 import com.example.demo.dto.response.LoginResponse;
 import com.example.demo.dto.response.LoginUserResponse;
+import com.example.demo.dto.response.StallSelectionResponse;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 @ExtendWith(MockitoExtension.class)
@@ -68,30 +69,29 @@ class StatusLogServiceTest {
     }
 
     @Test
-    void stallSelectionRecordsStallStatusAndSelectedStallId() {
+    void stallSelectionRecordsApplicationDateSelectedStallId() {
         MockHttpServletRequest request = post("/api/stalls/select");
-        setApiResponse(ApiResponse.success("ok", null), request);
-        when(stallRepository.findSelectedStallApplication("MD001", "A01"))
-                .thenReturn(Optional.of(Map.of(
-                        "applicationId", 10L,
-                        "selectedStallId", 88L,
-                        "stallStatus", "SELECTED")));
+        setApiResponse(ApiResponse.success("ok", new StallSelectionResponse("MD001", List.of())), request);
+        when(stallRepository.findSelectedApplicationDates("MD001"))
+                .thenReturn(List.of(
+                        Map.of(
+                                "applicationDateId", 101L,
+                                "selectedStallId", 88L),
+                        Map.of(
+                                "applicationDateId", 102L,
+                                "selectedStallId", 89L)));
 
-        ContentCachingRequestWrapper wrapper = cachedJsonRequest(
-                request,
-                """
-                        {"applicationNo":"MD001","stallNo":"A01"}
-                        """);
-
-        statusLogService.recordForRequest(1L, wrapper);
+        statusLogService.recordForRequest(1L, request);
 
         List<StatusLogEntry> entries = capturedEntries();
         assertThat(entries).extracting(StatusLogEntry::getTargetType)
-                .containsExactly("EVENT_STALL", "EVENT_APPLICATION");
+                .containsExactly("APPLICATION_DATE", "APPLICATION_DATE");
+        assertThat(entries).extracting(StatusLogEntry::getTargetId)
+                .containsExactly(101L, 102L);
         assertThat(entries).extracting(StatusLogEntry::getStatusField)
-                .containsExactly("event_stalls.status", "event_applications.selected_stall_id");
+                .containsExactly("application_dates.selected_stall_id", "application_dates.selected_stall_id");
         assertThat(entries).extracting(StatusLogEntry::getNewStatus)
-                .containsExactly("SELECTED", "88");
+                .containsExactly("88", "89");
     }
 
     @ParameterizedTest

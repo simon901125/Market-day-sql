@@ -85,27 +85,22 @@ public class StatusLogService {
             }
             body = new StallSelectionRequest();
             body.setApplicationNo(response.getApplicationNo());
-            body.setStallNo(response.getStallNo());
         }
 
-        Map<String, Object> selected = stallRepository.findSelectedStallApplication(
-                body.getApplicationNo(),
-                body.getStallNo())
-                .orElse(null);
-        if (selected == null) {
+        List<Map<String, Object>> selectedDates = stallRepository.findSelectedApplicationDates(body.getApplicationNo());
+        if (selectedDates.isEmpty()) {
             return List.of();
         }
 
-        Long applicationId = toLong(selected.get("applicationId"));
-        Long stallId = toLong(selected.get("selectedStallId"));
         List<StatusLogEntry> entries = new ArrayList<>();
-        entries.add(entry(requestLogId, "EVENT_STALL", stallId, "event_stalls.status", selected.get("stallStatus")));
-        entries.add(entry(
-                requestLogId,
-                "EVENT_APPLICATION",
-                applicationId,
-                "event_applications.selected_stall_id",
-                stallId));
+        for (Map<String, Object> selectedDate : selectedDates) {
+            entries.add(entry(
+                    requestLogId,
+                    "APPLICATION_DATE",
+                    toLong(selectedDate.get("applicationDateId")),
+                    "application_dates.selected_stall_id",
+                    selectedDate.get("selectedStallId")));
+        }
         return validEntries(entries);
     }
 

@@ -6,6 +6,17 @@ Market Day 後端 API 專案，使用 Spring Boot 建置，包含帳號註冊、
 
 > 更新日誌請依日期與 branch 分區：日期使用 `###`，branch 使用 `####`，避免不同分支的更動混在同一段。
 
+### 2026-07-02
+
+#### simon branch
+
+- `POST /api/stalls/select` 改為依 `applicationNo` 搭配多筆 `selections` 選位，每筆包含 `applyDate` 與 `stallNo`，且送出的日期必須完整對應該申請單的報名日期。
+- `GET /api/vendor/stall-map/{applicationNo}` 支援 `applyDate` 切換目前查看日期；未帶日期時預設該申請單第一個報名日，並回傳 `applyDates`、`applyDateCount`、`currentApplyDate` 與 `selectedStall`。
+- 新增公開 API `GET /api/eventsMap/{eventId}/stallsStatus` 至 `AllController`，不需 JWT；未帶 `applyDate` 時預設活動第一天，並回傳攤位尺寸、狀態、攤主名稱與目前日期等地圖欄位。
+- 移除攤主端舊的 `GET /api/events/{eventId}/stallsStatus` 使用方式，活動公開攤位狀態統一改由 `/api/eventsMap/{eventId}/stallsStatus` 查詢。
+- 主辦方地圖 API 支援依 `applyDate` 查看每日選位狀況；未帶日期時預設活動第一天。
+- 補齊攤位相關 Swagger 中文註解與 `ApiResponse` 中文錯誤訊息 mapping。
+
 ### 2026-07-01
 
 #### simon branch
@@ -199,6 +210,10 @@ POST /api/stalls/select
 GET  /api/organizer/account
 GET  /api/organizer/applications/search
 GET  /api/organizer/applications/{id}
+GET  /api/organizer/stall-map/{eventId}
+GET  /api/organizer/stall-map/{eventId}/stalls/{stallNo}
+POST /api/organizer/applications/{id}/approve
+POST /api/organizer/applications/{id}/reject
 ```
 
 ## API 清單
@@ -230,10 +245,10 @@ GET  /api/organizer/applications/{id}
 
 | Method | API | Request DTO | JWT | 說明 |
 | --- | --- | --- | --- | --- |
-| POST | `/api/stalls/select` | `StallSelectionRequest` | 是 | 依 `applicationNo` 與 `stallNo` 選位；後端自行查出活動並檢查攤主身分。 |
-| GET | `/api/events/{eventId}/stallsStatus` | - | 否 | 查詢活動攤位狀態。 |
+| POST | `/api/stalls/select` | `StallSelectionRequest` | 是 | 依 `applicationNo` 與 `selections[]` 一次送出該申請單所有報名日期的選位。 |
+| GET | `/api/eventsMap/{eventId}/stallsStatus` | - | 否 | 公開查詢活動指定日期攤位狀態；未帶日期時預設活動第一天。 |
 | GET | `/api/vendor/account` | - | 是 | 取得目前登入攤主資料。 |
-| GET | `/api/vendor/stall-map/{applicationNo}` | - | 是 | 查詢待選位或已成功選位申請單的攤位圖資料；已選位時回傳 `selectedStall`。 |
+| GET | `/api/vendor/stall-map/{applicationNo}` | - | 是 | 查詢攤主自己的申請單選位地圖，可用 `applyDate` 切換目前查看日期，並回傳報名日期數。 |
 
 ### 主辦方 API
 
@@ -242,6 +257,10 @@ GET  /api/organizer/applications/{id}
 | GET | `/api/organizer/account` | Authorization header | 是 | 取得目前登入主辦方資料。 |
 | GET | `/api/organizer/applications/search` | Authorization header | 是 | 查詢目前主辦方 published 活動的全部申請資料，依申請時間倒序。 |
 | GET | `/api/organizer/applications/{id}` | Authorization header | 是 | 查詢主辦方申請明細。 |
+| GET | `/api/organizer/stall-map/{eventId}` | Authorization header | 是 | 查詢主辦方活動指定日期的攤位選位狀況；未帶日期時預設活動第一天。 |
+| GET | `/api/organizer/stall-map/{eventId}/stalls/{stallNo}` | Authorization header | 是 | 查詢主辦方活動指定日期單一攤位的攤主與申請資訊。 |
+| POST | `/api/organizer/applications/{id}/approve` | Authorization header | 是 | 通過主辦方報名審核。 |
+| POST | `/api/organizer/applications/{id}/reject` | Authorization header | 是 | 退回主辦方報名審核，可填寫退件原因。 |
 
 ## 文件維護規則
 

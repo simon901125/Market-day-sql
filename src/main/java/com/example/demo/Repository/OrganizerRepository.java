@@ -47,6 +47,110 @@ public class OrganizerRepository {
         return RepositoryResultMapper.normalizeOptional(list.stream().findFirst());
     }
 
+    public List<Map<String, Object>> findOrganizerAccountingEvents(
+            Long organizerUserId,
+            String eventTitle,
+            LocalDateTime eventStartAt,
+            LocalDateTime eventEndExclusive) {
+        String sql = """
+                WITH application_financial AS (
+                    SELECT
+                        a.id,
+                        a.event_id,
+                        a.payment_status,
+                        a.is_cancelled,
+                        a.deposit_amount,
+                        a.deposit_status,
+                        COALESCE(paid_payment.paidAmount,
+                            CASE WHEN a.payment_status = N'PAID' THEN a.total_amount ELSE 0 END
+                        ) AS paidAmount,
+                        COALESCE(refunded.refundAmount, 0) AS refundAmount
+                    FROM dbo.event_applications a
+                    OUTER APPLY (
+                        SELECT SUM(p.amount) AS paidAmount
+                        FROM dbo.payments p
+                        WHERE p.application_id = a.id
+                          AND p.status = N'PAID'
+                    ) paid_payment
+                    OUTER APPLY (
+                        SELECT SUM(r.amount) AS refundAmount
+                        FROM dbo.refunds r
+                        WHERE r.application_id = a.id
+                          AND r.refund_status = N'REFUNDED'
+                    ) refunded
+                )
+                SELECT
+                    e.id AS eventId,
+                    e.title AS eventTitle,
+                    e.publish_status AS publishStatus,
+                    e.start_at AS eventStartAt,
+                    e.end_at AS eventEndAt,
+                    COALESCE(SUM(CASE
+                        WHEN af.payment_status = N'PAID' AND af.is_cancelled = 0 THEN 1
+                        ELSE 0
+                    END), 0) AS paidStallCount,
+                    COALESCE(NULLIF(stall_count.totalStalls, 0), e.max_booths) AS totalStallCount,
+                    COALESCE(SUM(CASE
+                        WHEN af.payment_status = N'PAID' AND af.is_cancelled = 0 THEN af.paidAmount
+                        ELSE 0
+                    END), 0) AS grossRevenue,
+                    COALESCE(SUM(af.refundAmount), 0) AS refundAmount,
+                    COALESCE(SUM(CASE
+                        WHEN af.payment_status = N'PAID'
+                         AND af.is_cancelled = 0
+                         AND af.deposit_status = N'RETURNED' THEN af.deposit_amount
+                        ELSE 0
+                    END), 0) AS returnedDepositAmount,
+                    COALESCE(SUM(CASE
+                        WHEN af.payment_status = N'PAID'
+                         AND af.is_cancelled = 0
+                         AND af.deposit_status = N'NOT_RETURNED' THEN af.deposit_amount
+                        ELSE 0
+                    END), 0) AS unreturnedDepositAmount,
+                    COALESCE(SUM(CASE
+                        WHEN af.payment_status = N'PAID' AND af.is_cancelled = 0 THEN af.paidAmount
+                        ELSE 0
+                    END), 0)
+                    - COALESCE(SUM(af.refundAmount), 0)
+                    - COALESCE(SUM(CASE
+                        WHEN af.payment_status = N'PAID'
+                         AND af.is_cancelled = 0
+                         AND af.deposit_status = N'RETURNED' THEN af.deposit_amount
+                        ELSE 0
+                    END), 0) AS netRevenue
+                FROM dbo.market_events e
+                OUTER APPLY (
+                    SELECT COUNT(*) AS totalStalls
+                    FROM dbo.event_stalls s
+                    WHERE s.event_id = e.id
+                ) stall_count
+                LEFT JOIN application_financial af ON af.event_id = e.id
+                WHERE e.user_id = :organizerUserId
+                  AND (:eventTitle IS NULL OR e.title LIKE N'%' + :eventTitle + N'%')
+                  AND (:eventStartAt IS NULL OR e.start_at >= :eventStartAt)
+                  AND (:eventEndExclusive IS NULL OR e.end_at < :eventEndExclusive)
+                GROUP BY
+                    e.id,
+                    e.title,
+                    e.publish_status,
+                    e.start_at,
+                    e.end_at,
+                    e.max_booths,
+                    stall_count.totalStalls
+                ORDER BY
+                    e.start_at DESC,
+                    e.id DESC
+                """;
+
+        Map<String, Object> map = new HashMap<>();
+        map.put("organizerUserId", organizerUserId);
+        map.put("eventTitle", normalizeText(eventTitle));
+        map.put("eventStartAt", eventStartAt);
+        map.put("eventEndExclusive", eventEndExclusive);
+
+        return RepositoryResultMapper.normalizeList(namedParameterJdbcTemplate.queryForList(sql, map));
+    }
+
     public List<Map<String, Object>> findOrganizerApplications(
             Long organizerUserId,
             String eventTitle,
@@ -71,10 +175,11 @@ public class OrganizerRepository {
                     vp.brand_type AS brandType,
                     a.created_at AS appliedAt,
                     application_dates.applyDates,
+                    application_dates.applicationDateCount,
+                    application_dates.selectedStallCount,
                     a.review_status AS reviewStatus,
                     a.payment_status AS paymentStatus,
                     a.deposit_status AS depositStatus,
-                    a.selected_stall_id AS selectedStallId,
                     a.is_cancelled AS isCancelled,
                     refund_data.refundStatus
                 FROM dbo.event_applications a
@@ -83,7 +188,10 @@ public class OrganizerRepository {
                 INNER JOIN dbo.vendor_profiles vp ON vp.id = a.vendor_profile_id
                 INNER JOIN dbo.user_profiles vendor_up ON vendor_up.id = vp.user_profile_id
                 OUTER APPLY (
-                    SELECT STRING_AGG(CONVERT(varchar(10), ad.apply_date, 23), ',') WITHIN GROUP (ORDER BY ad.apply_date) AS applyDates
+                    SELECT
+                        STRING_AGG(CONVERT(varchar(10), ad.apply_date, 23), ',') WITHIN GROUP (ORDER BY ad.apply_date) AS applyDates,
+                        COUNT(*) AS applicationDateCount,
+                        SUM(CASE WHEN ad.selected_stall_id IS NULL THEN 0 ELSE 1 END) AS selectedStallCount
                     FROM dbo.application_dates ad
                     WHERE ad.application_id = a.id
                 ) application_dates
@@ -158,12 +266,12 @@ public class OrganizerRepository {
                     vp.website_url AS websiteUrl,
                     c.name AS categoryName,
                     vendor_avatar.image_url AS vendorAvatarUrl,
-                    a.selected_stall_id AS selectedStallId,
-                    selected_stall.stall_no AS selectedStallNo,
-                    selected_stall.width AS stallWidth,
-                    selected_stall.length AS stallLength,
-                    selected_stall.height AS stallHeight,
-                    selected_zone.zone_name AS stallZoneName,
+                    selected_stall_summary.selectedStallId,
+                    selected_stall_summary.selectedStallNo,
+                    selected_stall_summary.stallWidth,
+                    selected_stall_summary.stallLength,
+                    selected_stall_summary.stallHeight,
+                    selected_stall_summary.stallZoneName,
                     a.vehicle_no AS vehicleNo,
                     a.applicant_note AS applicantNote,
                     a.total_amount AS totalAmount,
@@ -176,6 +284,8 @@ public class OrganizerRepository {
                     a.is_cancelled AS isCancelled,
                     a.created_at AS appliedAt,
                     application_dates.applyDates,
+                    application_dates.applicationDateCount,
+                    application_dates.selectedStallCount,
                     latest_payment.paymentNo,
                     latest_payment.paymentAmount,
                     latest_payment.paymentProvider,
@@ -193,8 +303,20 @@ public class OrganizerRepository {
                 INNER JOIN dbo.vendor_profiles vp ON vp.id = a.vendor_profile_id
                 INNER JOIN dbo.user_profiles vendor_up ON vendor_up.id = vp.user_profile_id
                 INNER JOIN dbo.categories c ON c.id = vp.category_id
-                LEFT JOIN dbo.event_stalls selected_stall ON selected_stall.id = a.selected_stall_id
-                LEFT JOIN dbo.event_stall_zones selected_zone ON selected_zone.id = selected_stall.zone_id
+                OUTER APPLY (
+                    SELECT TOP 1
+                        ad.selected_stall_id AS selectedStallId,
+                        selected_stall.stall_no AS selectedStallNo,
+                        selected_stall.width AS stallWidth,
+                        selected_stall.length AS stallLength,
+                        selected_stall.height AS stallHeight,
+                        selected_zone.zone_name AS stallZoneName
+                    FROM dbo.application_dates ad
+                    INNER JOIN dbo.event_stalls selected_stall ON selected_stall.id = ad.selected_stall_id
+                    INNER JOIN dbo.event_stall_zones selected_zone ON selected_zone.id = selected_stall.zone_id
+                    WHERE ad.application_id = a.id
+                    ORDER BY ad.apply_date ASC
+                ) selected_stall_summary
                 OUTER APPLY (
                     SELECT TOP 1 vi.image_url
                     FROM dbo.vendor_images vi
@@ -203,7 +325,10 @@ public class OrganizerRepository {
                     ORDER BY vi.id DESC
                 ) vendor_avatar
                 OUTER APPLY (
-                    SELECT STRING_AGG(CONVERT(varchar(10), ad.apply_date, 23), ',') WITHIN GROUP (ORDER BY ad.apply_date) AS applyDates
+                    SELECT
+                        STRING_AGG(CONVERT(varchar(10), ad.apply_date, 23), ',') WITHIN GROUP (ORDER BY ad.apply_date) AS applyDates,
+                        COUNT(*) AS applicationDateCount,
+                        SUM(CASE WHEN ad.selected_stall_id IS NULL THEN 0 ELSE 1 END) AS selectedStallCount
                     FROM dbo.application_dates ad
                     WHERE ad.application_id = a.id
                 ) application_dates
@@ -257,8 +382,18 @@ public class OrganizerRepository {
                     rl.created_at AS createdAt
                 FROM dbo.status_logs sl
                 INNER JOIN dbo.request_logs rl ON rl.id = sl.request_log_id
-                WHERE sl.target_type = N'EVENT_APPLICATION'
-                  AND sl.target_id = :applicationId
+                WHERE (
+                    sl.target_type = N'EVENT_APPLICATION'
+                    AND sl.target_id = :applicationId
+                )
+                OR (
+                    sl.target_type = N'APPLICATION_DATE'
+                    AND sl.target_id IN (
+                        SELECT ad.id
+                        FROM dbo.application_dates ad
+                        WHERE ad.application_id = :applicationId
+                    )
+                )
                 ORDER BY rl.created_at ASC, sl.id ASC
                 """;
 

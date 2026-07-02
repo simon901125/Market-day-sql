@@ -1,18 +1,28 @@
 package com.example.demo.dto.request;
 
-import io.swagger.v3.oas.annotations.media.Schema;
-import jakarta.validation.constraints.NotBlank;
+import java.time.LocalDate;
+import java.util.List;
 
-@Schema(description = "攤位選擇請求")
+import io.swagger.v3.oas.annotations.media.Schema;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotEmpty;
+import jakarta.validation.constraints.NotNull;
+
+@Schema(description = "Stall selection request")
 public class StallSelectionRequest {
 
     @NotBlank(message = "Application number is required")
-    @Schema(description = "報名編號，格式為 MD 加 3 位數字", example = "MD001")
+    @Schema(description = "Application number", example = "MD0101-APP01")
     private String applicationNo;
 
-    @NotBlank(message = "Stall number is required")
-    @Schema(description = "攤位編號，格式為大寫英文字母加 2 位數字", example = "A01")
+    @Schema(hidden = true)
     private String stallNo;
+
+    @Valid
+    @NotEmpty(message = "Stall selections are required")
+    @Schema(description = "Selections for every application date")
+    private List<Selection> selections;
 
     public String getApplicationNo() {
         return applicationNo;
@@ -28,5 +38,40 @@ public class StallSelectionRequest {
 
     public void setStallNo(String stallNo) {
         this.stallNo = stallNo;
+    }
+
+    public List<Selection> getSelections() {
+        return selections;
+    }
+
+    public void setSelections(List<Selection> selections) {
+        this.selections = selections;
+    }
+
+    public static class Selection {
+
+        @NotNull(message = "Apply date is required")
+        @Schema(description = "Application date", example = "2026-08-01")
+        private LocalDate applyDate;
+
+        @NotBlank(message = "Stall number is required")
+        @Schema(description = "Stall number", example = "A05")
+        private String stallNo;
+
+        public LocalDate getApplyDate() {
+            return applyDate;
+        }
+
+        public void setApplyDate(LocalDate applyDate) {
+            this.applyDate = applyDate;
+        }
+
+        public String getStallNo() {
+            return stallNo;
+        }
+
+        public void setStallNo(String stallNo) {
+            this.stallNo = stallNo;
+        }
     }
 }
