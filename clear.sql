@@ -2,7 +2,8 @@ USE MarketDayDB;
 GO
 
 /* =========================================================
-   Clear all stored data in MarketDayDB.
+   Clear all stored data in MarketDayDB, including test2~test5
+   seed data such as MD*, T2-*, MD0101, and T5-* rows.
 
    This script keeps tables, indexes, constraints, triggers,
    and extended properties. It only deletes table rows and
@@ -69,6 +70,14 @@ BEGIN TRY
     DBCC CHECKIDENT ('dbo.categories', RESEED, 0) WITH NO_INFOMSGS;
 
     COMMIT TRANSACTION;
+
+    SELECT
+        (SELECT COUNT(*) FROM dbo.users) AS users,
+        (SELECT COUNT(*) FROM dbo.categories) AS categories,
+        (SELECT COUNT(*) FROM dbo.market_events) AS marketEvents,
+        (SELECT COUNT(*) FROM dbo.event_applications) AS eventApplications,
+        (SELECT COUNT(*) FROM dbo.payments) AS payments,
+        (SELECT COUNT(*) FROM dbo.refunds) AS refunds;
 END TRY
 BEGIN CATCH
     IF @@TRANCOUNT > 0
