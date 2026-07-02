@@ -23,6 +23,8 @@ import com.example.demo.dto.response.PasswordResetVerificationResponse;
 import com.example.demo.dto.response.UserProfileResponse;
 import com.example.demo.dto.response.UserResponse;
 
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.ExampleObject;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -67,13 +69,29 @@ public class UserController {
 
     @Operation(summary = "攤主本地端登入", description = "使用 email 與密碼登入 VENDOR 帳號，成功後回傳 JWT token，並設定自動登出時間。")
     @PostMapping("/api/vendor/local-login")
-    public ApiResponse<LoginResponse> vendorLogin(@Valid @RequestBody LocalLoginRequest body) {
+    public ApiResponse<LoginResponse> vendorLogin(
+            @io.swagger.v3.oas.annotations.parameters.RequestBody(
+                    content = @Content(examples = @ExampleObject(value = """
+                            {
+                              "email": "vendor1@example.test",
+                              "password": "a12345678"
+                            }
+                            """)))
+            @Valid @RequestBody LocalLoginRequest body) {
         return userService.loginLocal(body, "VENDOR");
     }
 
     @Operation(summary = "主辦方本地端登入", description = "使用 email 與密碼登入 ORGANIZER 帳號，成功後回傳 JWT token，並設定自動登出時間。")
     @PostMapping("/api/organizer/local-login")
-    public ApiResponse<LoginResponse> organizerLogin(@Valid @RequestBody LocalLoginRequest body) {
+    public ApiResponse<LoginResponse> organizerLogin(
+            @io.swagger.v3.oas.annotations.parameters.RequestBody(
+                    content = @Content(examples = @ExampleObject(value = """
+                            {
+                              "email": "organizer1@example.test",
+                              "password": "a12345678"
+                            }
+                            """)))
+            @Valid @RequestBody LocalLoginRequest body) {
         return userService.loginLocal(body, "ORGANIZER");
     }
 

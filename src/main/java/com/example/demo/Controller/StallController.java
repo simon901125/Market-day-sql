@@ -1,60 +1,74 @@
 package com.example.demo.Controller;
 
-import java.util.List;
+import java.time.LocalDate;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.example.demo.Service.StallService;
 import com.example.demo.dto.request.StallSelectionRequest;
 import com.example.demo.dto.response.ApiResponse;
-import com.example.demo.dto.response.EventStallStatusResponse;
 import com.example.demo.dto.response.StallSelectionResponse;
 import com.example.demo.dto.response.VendorAccountResponse;
 import com.example.demo.dto.response.VendorStallMapResponse;
 
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.ExampleObject;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 
 @RestController
-@Tag(name = "攤位選位 API", description = "提供攤主選擇活動攤位需要的資料")
+@Tag(name = "攤主選位 API", description = "提供攤主帳號、選位地圖與送出選位相關功能")
 public class StallController {
 
     @Autowired
     private StallService stallService;
 
-    @Operation(summary = "選擇活動攤位", description = "依 applicationNo 取得申請活動，並以 stallNo 選擇狀態為 AVAILABLE 的攤位。")
+    @Operation(summary = "送出活動攤位選位", description = "攤主針對同一筆申請單一次送出所有報名日期的選位結果。")
     @PostMapping("/api/stalls/select")
     public ApiResponse<StallSelectionResponse> selectEventStall(
             @RequestHeader(value = "Authorization", required = false) String authorizationHeader,
+            @io.swagger.v3.oas.annotations.parameters.RequestBody(
+                    content = @Content(examples = @ExampleObject(value = """
+                            {
+                              "applicationNo": "MD0101-APP01",
+                              "selections": [
+                                {
+                                  "applyDate": "2026-08-01",
+                                  "stallNo": "A05"
+                                },
+                                {
+                                  "applyDate": "2026-08-02",
+                                  "stallNo": "A06"
+                                }
+                              ]
+                            }
+                            """)))
             @Valid @RequestBody StallSelectionRequest body) {
         return stallService.selectEventStall(authorizationHeader, body);
     }
 
-    @Operation(summary = "取得活動攤位狀態", description = "依 eventId 取得該活動所有攤位目前狀態。")
-    @GetMapping("/api/events/{eventId}/stallsStatus")
-    public ApiResponse<List<EventStallStatusResponse>> getEventStallsStatus(@PathVariable Long eventId) {
-        return stallService.getEventStallsStatus(eventId);
-    }
-
-    @Operation(summary = "取得攤主帳號資訊", description = "回傳目前登入攤主的共用資料與品牌詳細資料。")
+    @Operation(summary = "取得攤主帳號資訊", description = "取得目前登入攤主的帳號資料與品牌資料。")
     @GetMapping("/api/vendor/account")
     public ApiResponse<VendorAccountResponse> getVendorAccount(
             @RequestHeader(value = "Authorization", required = false) String authorizationHeader) {
         return stallService.getVendorAccount(authorizationHeader);
     }
 
-    @Operation(summary = "取得攤主選位地圖", description = "依 applicationNo 取得活動地圖、活動資訊與所有攤位狀態。")
+    @Operation(summary = "取得攤主申請單選位地圖", description = "依申請編號取得攤主自己的選位地圖；applyDate 用於切換要查看或選位的日期。")
     @GetMapping("/api/vendor/stall-map/{applicationNo}")
     public ApiResponse<VendorStallMapResponse> getVendorStallMap(
             @RequestHeader(value = "Authorization", required = false) String authorizationHeader,
-            @PathVariable String applicationNo) {
-        return stallService.getVendorStallMap(authorizationHeader, applicationNo);
+            @PathVariable String applicationNo,
+            @RequestParam(value = "applyDate", required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate applyDate) {
+        return stallService.getVendorStallMap(authorizationHeader, applicationNo, applyDate);
     }
 }

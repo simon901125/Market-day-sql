@@ -129,6 +129,7 @@ public class ApiResponse<T> {
             case "Password reset email verified successfully" -> "\u91cd\u8a2d\u5bc6\u78bc Email \u9a57\u8b49\u6210\u529f";
             case "Password reset successfully" -> "\u5bc6\u78bc\u91cd\u8a2d\u6210\u529f";
             case "Organizer account retrieved successfully" -> "\u4e3b\u8fa6\u65b9\u5e33\u865f\u8cc7\u6599\u53d6\u5f97\u6210\u529f";
+            case "Organizer accounting list retrieved successfully" -> "\u4e3b\u8fa6\u65b9\u5e33\u52d9\u5217\u8868\u53d6\u5f97\u6210\u529f";
             case "Organizer applications retrieved successfully" -> "\u4e3b\u8fa6\u65b9\u7533\u8acb\u5217\u8868\u53d6\u5f97\u6210\u529f";
             case "Organizer application detail retrieved successfully" -> "\u4e3b\u8fa6\u65b9\u7533\u8acb\u8a73\u60c5\u53d6\u5f97\u6210\u529f";
             case "Organizer application reviewed successfully" -> "\u4e3b\u8fa6\u65b9\u7533\u8acb\u5be9\u6838\u6210\u529f";
@@ -155,6 +156,10 @@ public class ApiResponse<T> {
             case "Email already verified" -> "\u6b64 Email \u5df2\u5b8c\u6210\u9a57\u8b49";
             case "Email is required" -> "\u8acb\u8f38\u5165 Email";
             case "Email is not verified" -> "Email \u5c1a\u672a\u5b8c\u6210\u9a57\u8b49";
+            case "Invalid email format" -> "Email \u683c\u5f0f\u4e0d\u6b63\u78ba";
+            case "Name is required" -> "\u8acb\u8f38\u5165\u540d\u7a31";
+            case "Name must not exceed 20 characters" -> "\u540d\u7a31\u4e0d\u5f97\u8d85\u904e 20 \u500b\u5b57";
+            case "Phone must be 10 digits and start with 09" -> "\u96fb\u8a71\u5fc5\u9808\u70ba 09 \u958b\u982d\u7684 10 \u4f4d\u6578\u5b57";
             case "Google account has already register" -> "\u6b64 Google \u5e33\u865f\u5df2\u88ab\u8a3b\u518a";
             case "Google account is not registered" -> "\u6b64 Google \u5e33\u865f\u5c1a\u672a\u8a3b\u518a";
             case "Google credential is required" -> "\u8acb\u63d0\u4f9b Google \u767b\u5165\u6191\u8b49";
@@ -178,13 +183,17 @@ public class ApiResponse<T> {
             case "Application does not belong to this account" -> "\u6b64\u7533\u8acb\u4e0d\u5c6c\u65bc\u76ee\u524d\u767b\u5165\u5e33\u865f";
             case "Application is not selectable for stall map" -> "\u6b64\u7533\u8acb\u76ee\u524d\u4e0d\u80fd\u67e5\u770b\u9078\u4f4d\u5730\u5716";
             case "Application is not approved, paid, or selectable" -> "\u6b64\u7533\u8acb\u5c1a\u672a\u901a\u904e\u5be9\u6838\u3001\u5c1a\u672a\u4ed8\u6b3e\u6216\u4e0d\u80fd\u9078\u4f4d";
-            case "Application review is pending" -> "此申請尚在審核中";
-            case "Application review was rejected" -> "此申請審核未通過";
-            case "Application is not approved" -> "此申請尚未通過審核";
-            case "Application payment is pending" -> "此申請尚未付款";
-            case "Application payment is not paid" -> "此申請付款狀態不可選位";
-            case "Application has already selected a stall" -> "此申請已完成選位";
-            case "Application status changed during stall selection" -> "申請狀態已變更，請重新整理後再試";
+            case "Application review is pending" -> "\u7533\u8acb\u5c1a\u5f85\u4e3b\u8fa6\u65b9\u5be9\u6838";
+            case "Application review was rejected" -> "\u7533\u8acb\u5be9\u6838\u672a\u901a\u904e";
+            case "Application is not approved" -> "\u7533\u8acb\u5c1a\u672a\u901a\u904e\u5be9\u6838";
+            case "Application payment is pending" -> "\u7533\u8acb\u5c1a\u5f85\u4ed8\u6b3e";
+            case "Application payment is not paid" -> "\u7533\u8acb\u4ed8\u6b3e\u72c0\u614b\u4e0d\u662f\u5df2\u4ed8\u6b3e";
+            case "Application dates are required" -> "\u627e\u4e0d\u5230\u7533\u8acb\u65e5\u671f\u8cc7\u6599";
+            case "Application has already selected a stall" -> "\u6b64\u7533\u8acb\u5df2\u5b8c\u6210\u9078\u4f4d";
+            case "Application status changed during stall selection" -> "\u7533\u8acb\u72c0\u614b\u5df2\u8b8a\u66f4\uff0c\u8acb\u91cd\u65b0\u78ba\u8a8d\u5f8c\u518d\u9078\u4f4d";
+            case "Apply date is required" -> "\u8acb\u63d0\u4f9b\u7533\u8acb\u65e5\u671f";
+            case "Apply date is not part of this event" -> "\u7533\u8acb\u65e5\u671f\u4e0d\u5c6c\u65bc\u6b64\u6d3b\u52d5";
+            case "Apply date is not part of this application" -> "\u7533\u8acb\u65e5\u671f\u4e0d\u5c6c\u65bc\u6b64\u5831\u540d";
             case "Event id is required" -> "\u8acb\u63d0\u4f9b\u6d3b\u52d5 ID";
             case "Event not found" -> "\u627e\u4e0d\u5230\u6d3b\u52d5\u8cc7\u6599";
             case "Stall not found" -> "\u627e\u4e0d\u5230\u6524\u4f4d\u8cc7\u6599";
@@ -194,6 +203,9 @@ public class ApiResponse<T> {
             case "Application has already been reviewed" -> "\u6b64\u7533\u8acb\u5df2\u5be9\u6838";
             case "Application has been cancelled" -> "\u6b64\u7533\u8acb\u5df2\u53d6\u6d88";
             case "Application review failed" -> "\u7533\u8acb\u5be9\u6838\u5931\u6557";
+            case "Stall selections are required" -> "\u8acb\u63d0\u4f9b\u9078\u4f4d\u8cc7\u6599";
+            case "Duplicate apply date in stall selections" -> "\u9078\u4f4d\u8cc7\u6599\u4e2d\u6709\u91cd\u8907\u7684\u7533\u8acb\u65e5\u671f";
+            case "Stall selections must match all application dates" -> "\u9078\u4f4d\u8cc7\u6599\u5fc5\u9808\u5b8c\u6574\u5c0d\u61c9\u6240\u6709\u5831\u540d\u65e5\u671f";
             case "Stall number is required" -> "\u8acb\u63d0\u4f9b\u6524\u4f4d\u7de8\u865f";
             case "Stall is not available" -> "\u6b64\u6524\u4f4d\u4e0d\u53ef\u9078\u64c7";
             case "Stall has already been selected" -> "\u6b64\u6524\u4f4d\u5df2\u88ab\u9078\u8d70";
@@ -208,7 +220,10 @@ public class ApiResponse<T> {
             case "Login status update failed" -> "\u767b\u5165\u72c0\u614b\u66f4\u65b0\u5931\u6557";
             case "Reset token is required" -> "\u8acb\u63d0\u4f9b\u91cd\u8a2d\u5bc6\u78bc token";
             case "Password is required" -> "\u8acb\u8f38\u5165\u5bc6\u78bc";
+            case "Password must be at least 8 characters and contain letters and numbers" -> "\u5bc6\u78bc\u81f3\u5c11\u9700 8 \u500b\u5b57\uff0c\u4e14\u9700\u5305\u542b\u82f1\u6587\u8207\u6578\u5b57";
             case "Password reset failed" -> "\u5bc6\u78bc\u91cd\u8a2d\u5931\u6557";
+            case "Verification code is required" -> "\u8acb\u8f38\u5165\u9a57\u8b49\u78bc";
+            case "Verification code must be 6 digits" -> "\u9a57\u8b49\u78bc\u5fc5\u9808\u70ba 6 \u4f4d\u6578\u5b57";
             case "6-digit verification code is required" -> "\u8acb\u8f38\u5165 6 \u4f4d\u6578\u9a57\u8b49\u78bc";
             default -> isLikelyEnglish(message) ? "\u64cd\u4f5c\u5931\u6557" : message;
         };
@@ -217,6 +232,7 @@ public class ApiResponse<T> {
     private static boolean isLikelyEnglish(String message) {
         return message.matches(".*[A-Za-z].*");
     }
+
     @JsonIgnore
     public boolean isSuccessStatus() {
         return statusCode >= 200 && statusCode < 300;

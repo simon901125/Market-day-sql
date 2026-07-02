@@ -23,6 +23,8 @@ import com.example.demo.dto.response.OrganizerAccountResponse;
 import com.example.demo.dto.response.OrganizerApplicationDetailResponse;
 import com.example.demo.dto.response.OrganizerApplicationSearchResponse;
 import com.example.demo.dto.response.OrganizerApplicationSummaryResponse;
+import com.example.demo.dto.response.OrganizerAccountingSearchResponse;
+import com.example.demo.dto.response.OrganizerAccountingSummaryResponse;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -84,6 +86,34 @@ public class OrganizerService {
                 organizer.get("serviceStartTime"),
                 organizer.get("serviceEndTime")));
         return ApiResponse.success("Organizer account retrieved successfully", new OrganizerAccountResponse(account));
+    }
+
+    public ApiResponse<OrganizerAccountingSearchResponse> searchOrganizerAccounts(
+            String authorizationHeader,
+            String eventTitle,
+            String status,
+            LocalDate eventStartAt,
+            LocalDate eventEndAt) {
+        Map<String, Object> organizer = getAuthenticatedOrganizer(authorizationHeader);
+        if (organizer.containsKey("message")) {
+            return ApiResponse.fail(organizer.get("message").toString());
+        }
+
+        Long organizerUserId = ((Number) organizer.get("userId")).longValue();
+        LocalDateTime startAt = eventStartAt == null ? null : eventStartAt.atStartOfDay();
+        LocalDateTime endExclusive = eventEndAt == null ? null : eventEndAt.plusDays(1).atStartOfDay();
+        List<OrganizerAccountingSummaryResponse> accounts = organizerRepository
+                .findOrganizerAccountingEvents(organizerUserId, eventTitle, startAt, endExclusive)
+                .stream()
+                .map(this::withDisplayPublishStatus)
+                .filter(account -> matchesPublishStatus(account, status))
+                .map(this::toAccountingSummaryResponse)
+                .map(OrganizerAccountingSummaryResponse::new)
+                .toList();
+
+        return ApiResponse.success(
+                "Organizer accounting list retrieved successfully",
+                new OrganizerAccountingSearchResponse(accounts));
     }
 
     public ApiResponse<OrganizerApplicationSearchResponse> searchOrganizerApplications(
@@ -228,12 +258,48 @@ public class OrganizerService {
         return response;
     }
 
+    private Map<String, Object> withDisplayPublishStatus(Map<String, Object> account) {
+        Map<String, Object> response = new LinkedHashMap<>(account);
+        response.put("publishStatusText", displayPublishStatus(account.get("publishStatus")));
+        return response;
+    }
+
+    private boolean matchesPublishStatus(Map<String, Object> account, String status) {
+        String normalizedStatus = normalizeText(status);
+        if (normalizedStatus == null
+                || "\u5168\u90e8\u72c0\u614b".equals(normalizedStatus)
+                || "?券".equals(normalizedStatus)) {
+            return true;
+        }
+        return normalizedStatus.toUpperCase().equals(statusText(account.get("publishStatus")))
+                || normalizedStatus.equals(normalizeText(account.get("publishStatusText")));
+    }
+
     private boolean matchesApplicationStatus(Map<String, Object> application, String status) {
         String normalizedStatus = normalizeText(status);
         if (normalizedStatus == null || "全部".equals(normalizedStatus)) {
             return true;
         }
         return normalizedStatus.equals(normalizeText(application.get("applicationStatus")));
+    }
+
+    private Map<String, Object> toAccountingSummaryResponse(Map<String, Object> account) {
+        Object paidStallCount = account.get("paidStallCount");
+        Object totalStallCount = account.get("totalStallCount");
+        return orderedMap(
+                "eventId", account.get("eventId"),
+                "eventTitle", account.get("eventTitle"),
+                "publishStatus", account.get("publishStatus"),
+                "publishStatusText", account.get("publishStatusText"),
+                "eventDate", formatEventDate(account),
+                "paidStallCount", paidStallCount,
+                "totalStallCount", totalStallCount,
+                "paidStallText", integerText(paidStallCount) + " / " + integerText(totalStallCount),
+                "grossRevenue", account.get("grossRevenue"),
+                "refundAmount", account.get("refundAmount"),
+                "returnedDepositAmount", account.get("returnedDepositAmount"),
+                "unreturnedDepositAmount", account.get("unreturnedDepositAmount"),
+                "netRevenue", account.get("netRevenue"));
     }
 
     private Map<String, Object> toApplicationSummaryResponse(Map<String, Object> application) {
@@ -479,7 +545,7 @@ public class OrganizerService {
                 || "REFUND_FAILED".equals(refundStatus)
                 || "REFUNDED".equals(refundStatus);
         boolean refundedReached = "REFUNDED".equals(refundStatus);
-        boolean stallSelectedReached = application.get("selectedStallId") != null;
+        boolean stallSelectedReached = isAllApplicationDatesSelected(application);
         boolean depositReturnedReached = "RETURNED".equals(statusText(application.get("depositStatus")));
 
         flow.add(statusStep(
@@ -544,7 +610,7 @@ public class OrganizerService {
                 "\u9078\u4f4d\u6642\u9593",
                 stallSelectedReached ? "\u5df2\u9078\u4f4d" : null,
                 stallSelectedReached
-                        ? statusCreatedAt(statusLogs, "event_applications.selected_stall_id", application.get("selectedStallId"))
+                        ? statusCreatedAt(statusLogs, "application_dates.selected_stall_id", application.get("selectedStallId"))
                         : null));
         flow.add(statusStep(
                 "DEPOSIT_RETURNED",
@@ -640,6 +706,19 @@ public class OrganizerService {
         };
     }
 
+    private String displayPublishStatus(Object value) {
+        return switch (statusText(value) == null ? "" : statusText(value)) {
+            case "DRAFT" -> "\u8349\u7a3f";
+            case "READY_TO_PUBLISH" -> "\u5f85\u767c\u5e03";
+            case "PUBLISHED" -> "\u5df2\u767c\u5e03";
+            case "BRANDS_PUBLISHED" -> "\u6524\u5546\u540d\u55ae\u5df2\u767c\u5e03";
+            case "UNPUBLISH_REQUESTED" -> "\u4e0b\u67b6\u7533\u8acb\u4e2d";
+            case "UNPUBLISHED" -> "\u5df2\u4e0b\u67b6";
+            case "CANCELLED" -> "\u5df2\u53d6\u6d88";
+            default -> normalizeText(value);
+        };
+    }
+
     private Object firstPresent(Object... values) {
         for (Object value : values) {
             if (value != null) {
@@ -718,6 +797,15 @@ public class OrganizerService {
             }
         }
         return days == 0 ? null : days;
+    }
+
+    private boolean isAllApplicationDatesSelected(Map<String, Object> application) {
+        Long applicationDateCount = toLong(application.get("applicationDateCount"));
+        Long selectedStallCount = toLong(application.get("selectedStallCount"));
+        if (applicationDateCount > 0) {
+            return applicationDateCount.equals(selectedStallCount);
+        }
+        return application.get("selectedStallId") != null;
     }
 
     private String dayLabel(Integer days) {

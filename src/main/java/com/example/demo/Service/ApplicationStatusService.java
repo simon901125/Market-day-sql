@@ -42,7 +42,7 @@ public class ApplicationStatusService {
             return "待付款";
         }
 
-        if ("PAID".equals(paymentStatus) && application.get("selectedStallId") == null) {
+        if ("PAID".equals(paymentStatus) && !isAllApplicationDatesSelected(application)) {
             return "待選位";
         }
 
@@ -101,5 +101,24 @@ public class ApplicationStatusService {
 
     private String stringValue(Object value) {
         return value == null ? "" : value.toString().trim().toUpperCase();
+    }
+
+    private boolean isAllApplicationDatesSelected(Map<String, Object> application) {
+        Long applicationDateCount = toLong(application.get("applicationDateCount"));
+        Long selectedStallCount = toLong(application.get("selectedStallCount"));
+        if (applicationDateCount > 0) {
+            return applicationDateCount.equals(selectedStallCount);
+        }
+        return application.get("selectedStallId") != null;
+    }
+
+    private Long toLong(Object value) {
+        if (value instanceof Number number) {
+            return number.longValue();
+        }
+        if (value instanceof String string && !string.isBlank()) {
+            return Long.valueOf(string);
+        }
+        return 0L;
     }
 }

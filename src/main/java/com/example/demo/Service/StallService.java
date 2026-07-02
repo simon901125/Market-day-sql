@@ -1,10 +1,16 @@
 package com.example.demo.Service;
 
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.interceptor.TransactionAspectSupport;
@@ -53,8 +59,8 @@ public class StallService {
             return ApiResponse.fail("Application number is required");
         }
 
-        if (body.getStallNo() == null || body.getStallNo().isBlank()) {
-            return ApiResponse.fail("Stall number is required");
+        if (body.getSelections() == null || body.getSelections().isEmpty()) {
+            return ApiResponse.fail("Stall selections are required");
         }
 
         String email = jwtService.getEmail(token);
@@ -102,51 +108,102 @@ public class StallService {
             return ApiResponse.fail("Application payment is not paid");
         }
 
-        if (application.get("selectedStallId") != null) {
+        Long applicationId = ((Number) application.get("applicationId")).longValue();
+        List<Map<String, Object>> applicationDates = stallRepository.findApplicationDatesForSelection(applicationId);
+        if (applicationDates.isEmpty()) {
+            return ApiResponse.fail("Application dates are required");
+        }
+        if (applicationDates.stream().anyMatch(date -> date.get("selectedStallId") != null)) {
             return ApiResponse.fail("Application has already selected a stall");
         }
 
         Long eventId = ((Number) application.get("eventId")).longValue();
-        Map<String, Object> stall = stallRepository.findStallForSelection(eventId, body.getStallNo())
-                .orElse(null);
-        if (stall == null) {
-            return ApiResponse.fail("Stall not found");
+        Set<LocalDate> registeredDates = applicationDates.stream()
+                .map(date -> toLocalDate(date.get("applyDate")))
+                .collect(Collectors.toSet());
+        Map<LocalDate, String> requestedSelections = new HashMap<>();
+        for (StallSelectionRequest.Selection selection : body.getSelections()) {
+            if (selection == null || selection.getApplyDate() == null) {
+                return ApiResponse.fail("Apply date is required");
+            }
+            if (selection.getStallNo() == null || selection.getStallNo().isBlank()) {
+                return ApiResponse.fail("Stall number is required");
+            }
+            if (requestedSelections.put(selection.getApplyDate(), selection.getStallNo().trim()) != null) {
+                return ApiResponse.fail("Duplicate apply date in stall selections");
+            }
+        }
+        if (!requestedSelections.keySet().equals(registeredDates)) {
+            return ApiResponse.fail("Stall selections must match all application dates");
         }
 
-        String stallStatus = stringValue(stall.get("status"));
-        if ("SELECTED".equals(stallStatus)) {
-            return ApiResponse.fail("Stall has already been selected");
-        }
-        if (!"AVAILABLE".equals(stallStatus)) {
-            return ApiResponse.fail("Stall is not available");
-        }
+        List<StallSelectionResponse.Selection> selectedResults = new java.util.ArrayList<>();
+        for (Map.Entry<LocalDate, String> requestedSelection : requestedSelections.entrySet()) {
+            Map<String, Object> stall = stallRepository.findStallForSelection(eventId, requestedSelection.getValue())
+                    .orElse(null);
+            if (stall == null) {
+                TransactionAspectSupport.currentTransactionStatus().setRollbackOnly();
+                return ApiResponse.fail("Stall not found");
+            }
 
-        Long stallId = ((Number) stall.get("id")).longValue();
-        // Claim the stall first so concurrent selection has one winner.
-        int stallUpdatedRows = stallRepository.selectAvailableStall(stallId);
-        if (stallUpdatedRows == 0) {
-            return ApiResponse.fail("Stall has already been selected");
-        }
+            String stallStatus = stringValue(stall.get("status"));
+            if (!"AVAILABLE".equals(stallStatus)) {
+                TransactionAspectSupport.currentTransactionStatus().setRollbackOnly();
+                return ApiResponse.fail("Stall is not available");
+            }
 
-        int applicationUpdatedRows = stallRepository.bindApplicationSelectedStall(
-                eventId,
-                body.getApplicationNo(),
-                stallId);
-        if (applicationUpdatedRows == 0) {
-            TransactionAspectSupport.currentTransactionStatus().setRollbackOnly();
-            return ApiResponse.fail("Application status changed during stall selection");
+            Long stallId = ((Number) stall.get("id")).longValue();
+            int updatedRows;
+            try {
+                updatedRows = stallRepository.bindApplicationDateSelectedStall(
+                        applicationId,
+                        requestedSelection.getKey(),
+                        stallId);
+            } catch (DataIntegrityViolationException exception) {
+                TransactionAspectSupport.currentTransactionStatus().setRollbackOnly();
+                return ApiResponse.fail("Stall has already been selected");
+            }
+            if (updatedRows == 0) {
+                TransactionAspectSupport.currentTransactionStatus().setRollbackOnly();
+                return ApiResponse.fail("Stall has already been selected");
+            }
+            selectedResults.add(new StallSelectionResponse.Selection(
+                    requestedSelection.getKey(),
+                    requestedSelection.getValue()));
         }
 
         return ApiResponse.success(
                 "Stall selection successful",
-                new StallSelectionResponse(body.getApplicationNo(), body.getStallNo()));
+                new StallSelectionResponse(body.getApplicationNo(), selectedResults));
     }
 
-    public ApiResponse<List<EventStallStatusResponse>> getEventStallsStatus(Long eventId) {
-        List<EventStallStatusResponse> stalls = stallRepository.findEventStallsStatus(eventId).stream()
+    public ApiResponse<List<EventStallStatusResponse>> getPublicEventStallsStatus(Long eventId, LocalDate applyDate) {
+        if (eventId == null) {
+            return ApiResponse.fail("Event id is required");
+        }
+        Map<String, Object> eventData = stallRepository.findEventForStallStatus(eventId)
+                .orElse(null);
+        if (eventData == null) {
+            return ApiResponse.fail("Event not found");
+        }
+
+        LocalDate startDate = toLocalDate(eventData.get("startAt"));
+        LocalDate endDate = toLocalDate(eventData.get("endAt"));
+        if (startDate == null || endDate == null) {
+            return ApiResponse.fail("Apply date is required");
+        }
+
+        if (applyDate != null && !isDateInEventRange(applyDate, eventData)) {
+            return ApiResponse.fail("Apply date is not part of this event");
+        }
+
+        LocalDate targetDate = applyDate == null ? startDate : applyDate;
+        List<EventStallStatusResponse> stalls = stallRepository.findEventStallsStatus(eventId, targetDate).stream()
+                .map(stall -> withCurrentApplyDate(stall, targetDate))
                 .map(this::withDisplayBoothStatus)
                 .map(EventStallStatusResponse::new)
                 .toList();
+
         return ApiResponse.success("Event stalls status retrieved successfully", stalls);
     }
 
@@ -198,7 +255,10 @@ public class StallService {
         return ApiResponse.success("Vendor account retrieved successfully", new VendorAccountResponse(account));
     }
 
-    public ApiResponse<VendorStallMapResponse> getVendorStallMap(String authorizationHeader, String applicationNo) {
+    public ApiResponse<VendorStallMapResponse> getVendorStallMap(
+            String authorizationHeader,
+            String applicationNo,
+            LocalDate applyDate) {
         String token = jwtService.extractTokenFromAuthorizationHeader(authorizationHeader);
         if (token == null || token.isBlank()) {
             return ApiResponse.fail("Authorization token is required");
@@ -224,10 +284,31 @@ public class StallService {
             return ApiResponse.fail("This account is not a vendor");
         }
 
-        Map<String, Object> applicationData = stallRepository.findVendorStallMapApplication(applicationNo)
+        LocalDate targetDate = applyDate;
+        if (targetDate == null) {
+            Map<String, Object> application = stallRepository.findApplicationForSelection(applicationNo).orElse(null);
+            if (application == null) {
+                return ApiResponse.fail("Application not found");
+            }
+            List<Map<String, Object>> applicationDates = stallRepository
+                    .findApplicationDatesForSelection(((Number) application.get("applicationId")).longValue());
+            targetDate = applicationDates.stream()
+                    .map(date -> toLocalDate(date.get("applyDate")))
+                    .filter(date -> date != null)
+                    .min(LocalDate::compareTo)
+                    .orElse(null);
+        }
+        if (targetDate == null) {
+            return ApiResponse.fail("Apply date is required");
+        }
+
+        Map<String, Object> applicationData = stallRepository.findVendorStallMapApplication(applicationNo, targetDate)
                 .orElse(null);
         if (applicationData == null) {
             return ApiResponse.fail("Application not found");
+        }
+        if (applicationData.get("currentApplyDate") == null) {
+            return ApiResponse.fail("Apply date is not part of this application");
         }
 
         Long vendorUserId = ((Number) vendor.get("userId")).longValue();
@@ -242,7 +323,7 @@ public class StallService {
         }
 
         Long eventId = ((Number) applicationData.get("eventId")).longValue();
-        List<Map<String, Object>> stalls = stallRepository.findEventStallsMap(eventId).stream()
+        List<Map<String, Object>> stalls = stallRepository.findEventStallsMap(eventId, targetDate).stream()
                 .map(this::withDisplayBoothStatus)
                 .toList();
 
@@ -250,6 +331,9 @@ public class StallService {
         application.put("applicationNo", applicationData.get("applicationNo"));
         application.put("applicationStatus", applicationStatus);
         application.put("vendorName", applicationData.get("vendorName"));
+        application.put("currentApplyDate", targetDate);
+        application.put("applyDates", applicationData.get("applyDates"));
+        application.put("applyDateCount", applicationData.get("applicationDateCount"));
         application.put("selectedStallId", applicationData.get("selectedStallId"));
         application.put("selectedStall", selectedStall(applicationData));
 
@@ -265,7 +349,10 @@ public class StallService {
         return ApiResponse.success("Vendor stall map retrieved successfully", new VendorStallMapResponse(application, event, stalls));
     }
 
-    public ApiResponse<MapBackedResponse> getOrganizerStallMap(String authorizationHeader, Long eventId) {
+    public ApiResponse<MapBackedResponse> getOrganizerStallMap(
+            String authorizationHeader,
+            Long eventId,
+            LocalDate applyDate) {
         Map<String, Object> organizer = authenticatedOrganizer(authorizationHeader);
         if (organizer.containsKey("message")) {
             return ApiResponse.fail(organizer.get("message").toString());
@@ -281,7 +368,15 @@ public class StallService {
             return ApiResponse.fail("Event not found");
         }
 
-        List<Map<String, Object>> stallRows = stallRepository.findEventStallsMap(eventId).stream()
+        LocalDate targetDate = applyDate == null ? toLocalDate(eventData.get("startAt")) : applyDate;
+        if (targetDate == null) {
+            return ApiResponse.fail("Apply date is required");
+        }
+        if (!isDateInEventRange(targetDate, eventData)) {
+            return ApiResponse.fail("Apply date is not part of this event");
+        }
+
+        List<Map<String, Object>> stallRows = stallRepository.findEventStallsMap(eventId, targetDate).stream()
                 .map(this::withDisplayBoothStatus)
                 .toList();
 
@@ -290,6 +385,7 @@ public class StallService {
         event.put("eventTitle", eventData.get("eventTitle"));
         event.put("startAt", eventData.get("startAt"));
         event.put("endAt", eventData.get("endAt"));
+        event.put("currentApplyDate", targetDate);
         event.put("address", joinAddress(
                 eventData.get("city"),
                 eventData.get("district"),
@@ -306,7 +402,8 @@ public class StallService {
     public ApiResponse<MapBackedResponse> getOrganizerStallMapDetail(
             String authorizationHeader,
             Long eventId,
-            String stallNo) {
+            String stallNo,
+            LocalDate applyDate) {
         Map<String, Object> organizer = authenticatedOrganizer(authorizationHeader);
         if (organizer.containsKey("message")) {
             return ApiResponse.fail(organizer.get("message").toString());
@@ -319,8 +416,20 @@ public class StallService {
         }
 
         Long organizerUserId = ((Number) organizer.get("userId")).longValue();
+        Map<String, Object> eventData = stallRepository.findOrganizerStallMapEvent(organizerUserId, eventId)
+                .orElse(null);
+        if (eventData == null) {
+            return ApiResponse.fail("Event not found");
+        }
+        LocalDate targetDate = applyDate == null ? toLocalDate(eventData.get("startAt")) : applyDate;
+        if (targetDate == null) {
+            return ApiResponse.fail("Apply date is required");
+        }
+        if (!isDateInEventRange(targetDate, eventData)) {
+            return ApiResponse.fail("Apply date is not part of this event");
+        }
         Map<String, Object> detail = stallRepository
-                .findOrganizerStallMapDetail(organizerUserId, eventId, stallNo)
+                .findOrganizerStallMapDetail(organizerUserId, eventId, stallNo, targetDate)
                 .orElse(null);
         if (detail == null) {
             return ApiResponse.fail("Stall not found");
@@ -337,6 +446,7 @@ public class StallService {
         stall.put("length", detail.get("length"));
         stall.put("height", detail.get("height"));
         stall.put("status", displayBoothStatus(detail.get("stallStatus")));
+        stall.put("applyDate", targetDate);
         stall.put("selectedAt", detail.get("selectedAt"));
 
         Map<String, Object> response = orderedMap(
@@ -355,7 +465,9 @@ public class StallService {
     }
 
     private boolean canViewStallMap(String applicationStatus, Map<String, Object> applicationData) {
-        return "待選位".equals(applicationStatus) || isSelectedStallApplication(applicationData);
+        return "PAID".equals(stringValue(applicationData.get("paymentStatus")))
+                && !isTrue(applicationData.get("isCancelled"))
+                && stringValue(applicationData.get("refundStatus")).isEmpty();
     }
 
     private Map<String, Object> authenticatedOrganizer(String authorizationHeader) {
@@ -411,6 +523,12 @@ public class StallService {
         return response;
     }
 
+    private Map<String, Object> withCurrentApplyDate(Map<String, Object> stall, LocalDate applyDate) {
+        Map<String, Object> response = new LinkedHashMap<>(stall);
+        response.put("currentApplyDate", applyDate);
+        return response;
+    }
+
     private List<Map<String, Object>> groupStallsByZone(List<Map<String, Object>> stalls) {
         Map<String, Map<String, Object>> zones = new LinkedHashMap<>();
         for (Map<String, Object> stall : stalls) {
@@ -443,7 +561,8 @@ public class StallService {
     }
 
     private boolean isSelectedStallApplication(Map<String, Object> applicationData) {
-        return applicationData.get("selectedStallId") != null
+        return toLong(applicationData.get("selectedStallCount")) > 0
+                && toLong(applicationData.get("selectedStallCount")).equals(toLong(applicationData.get("applicationDateCount")))
                 && "PAID".equals(stringValue(applicationData.get("paymentStatus")))
                 && !isTrue(applicationData.get("isCancelled"))
                 && stringValue(applicationData.get("refundStatus")).isEmpty();
@@ -456,6 +575,7 @@ public class StallService {
 
         Map<String, Object> stall = new LinkedHashMap<>();
         stall.put("selectedStallId", applicationData.get("selectedStallId"));
+        stall.put("applyDate", applicationData.get("currentApplyDate"));
         stall.put("stallNo", applicationData.get("selectedStallNo"));
         stall.put("zoneName", applicationData.get("selectedStallZoneName"));
         stall.put("width", applicationData.get("selectedStallWidth"));
@@ -499,6 +619,49 @@ public class StallService {
 
     private String stringValue(Object value) {
         return value == null ? "" : value.toString().trim().toUpperCase();
+    }
+
+    private LocalDate toLocalDate(Object value) {
+        if (value instanceof LocalDate localDate) {
+            return localDate;
+        }
+        if (value instanceof LocalDateTime localDateTime) {
+            return localDateTime.toLocalDate();
+        }
+        if (value instanceof java.sql.Date sqlDate) {
+            return sqlDate.toLocalDate();
+        }
+        if (value instanceof java.sql.Timestamp timestamp) {
+            return timestamp.toLocalDateTime().toLocalDate();
+        }
+        String text = value == null ? "" : value.toString().trim();
+        if (text.length() >= 10) {
+            try {
+                return LocalDate.parse(text.substring(0, 10));
+            } catch (RuntimeException ignored) {
+                return null;
+            }
+        }
+        return null;
+    }
+
+    private boolean isDateInEventRange(LocalDate date, Map<String, Object> eventData) {
+        LocalDate startDate = toLocalDate(eventData.get("startAt"));
+        LocalDate endDate = toLocalDate(eventData.get("endAt"));
+        if (date == null || startDate == null || endDate == null) {
+            return false;
+        }
+        return !date.isBefore(startDate) && !date.isAfter(endDate);
+    }
+
+    private Long toLong(Object value) {
+        if (value instanceof Number number) {
+            return number.longValue();
+        }
+        if (value instanceof String string && !string.isBlank()) {
+            return Long.valueOf(string);
+        }
+        return 0L;
     }
 
     private Map<String, Object> orderedMap(Object... keyValues) {
