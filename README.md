@@ -11,8 +11,9 @@
 #### simon branch
 
 - `market_events` 狀態欄位改為單一 `workflow_status`，取代原本的 `review_status` 與 `publish_status`。
-- `workflow_status` 允許值為 `DRAFT`、`PENDING_REVIEW`、`MAP_BUILDING`、`READY_TO_PUBLISH`、`PUBLISHED`、`UNPUBLISH_REQUESTED`、`UNPUBLISHED`、`CANCELLED`。
+- `workflow_status` 允許值為 `DRAFT`、`PENDING_REVIEW`、`MAP_BUILDING`、`READY_TO_PUBLISH`、`PUBLISHED`、`FINAL_REVIEW`、`UNPUBLISH_REQUESTED`、`UNPUBLISHED`、`CANCELLED`。
 - 新增 `brands_public_at`，品牌名單是否公開改由此時間欄位判斷，不再使用 `BRANDS_PUBLISHED` workflow 狀態。
+- `PUBLISHED` 表示活動已發布並進入報名、審核、付款、選位等公開後流程；報名截止後的最終名單確認改由 `FINAL_REVIEW` 表示，品牌公開則以 `brands_public_at <= now` 判斷。
 - 移除活動流程中的 `REVISION_REQUIRED`；需要補件時回到 `PENDING_REVIEW` 流程處理。
 
 ### 2026-07-02

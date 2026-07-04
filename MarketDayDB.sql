@@ -244,7 +244,7 @@ CREATE TABLE dbo.market_events
     CONSTRAINT FK_market_events_categories FOREIGN KEY (category_id) REFERENCES dbo.categories(id),
     CONSTRAINT CK_market_events_date_range CHECK (end_at >= start_at),
     CONSTRAINT CK_market_events_registration_range CHECK (registration_end_at >= registration_start_at),
-    CONSTRAINT CK_market_events_workflow_status CHECK (workflow_status IN (N'DRAFT', N'PENDING_REVIEW', N'MAP_BUILDING', N'READY_TO_PUBLISH', N'PUBLISHED', N'UNPUBLISH_REQUESTED', N'UNPUBLISHED', N'CANCELLED'))
+    CONSTRAINT CK_market_events_workflow_status CHECK (workflow_status IN (N'DRAFT', N'PENDING_REVIEW', N'MAP_BUILDING', N'READY_TO_PUBLISH', N'PUBLISHED', N'FINAL_REVIEW', N'UNPUBLISH_REQUESTED', N'UNPUBLISHED', N'CANCELLED'))
 );
 GO
 
@@ -743,7 +743,7 @@ EXEC dbo.usp_add_column_description N'market_events', N'cover_image_url', N'活�
 EXEC dbo.usp_add_column_description N'market_events', N'map_image_url', N'攤位地圖底圖';
 EXEC dbo.usp_add_column_description N'market_events', N'public_info_at', N'公開資訊時間';
 EXEC dbo.usp_add_column_description N'market_events', N'brands_public_at', N'品牌名單公開時間';
-EXEC dbo.usp_add_column_description N'market_events', N'workflow_status', N'活動流程狀態（DRAFT/PENDING_REVIEW/MAP_BUILDING/READY_TO_PUBLISH/PUBLISHED/UNPUBLISH_REQUESTED/UNPUBLISHED/CANCELLED）';
+EXEC dbo.usp_add_column_description N'market_events', N'workflow_status', N'活動流程狀態（DRAFT/PENDING_REVIEW/MAP_BUILDING/READY_TO_PUBLISH/PUBLISHED/FINAL_REVIEW/UNPUBLISH_REQUESTED/UNPUBLISHED/CANCELLED）';
 EXEC dbo.usp_add_column_description N'market_events', N'review_note', N'補件原因 / 審核備註';
 
 EXEC dbo.usp_add_column_description N'event_unpublish_requests', N'id', N'活動下架申請 ID';
