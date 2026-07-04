@@ -236,24 +236,22 @@ CREATE TABLE dbo.market_events
     cover_image_url NVARCHAR(500) NULL,
     map_image_url NVARCHAR(500) NULL,
     public_info_at DATETIME2(0) NULL,
-    review_status NVARCHAR(30) NOT NULL CONSTRAINT DF_market_events_review_status DEFAULT N'PENDING',
+    brands_public_at DATETIME2(0) NULL,
+    workflow_status NVARCHAR(30) NOT NULL CONSTRAINT DF_market_events_workflow_status DEFAULT N'DRAFT',
     review_note NVARCHAR(MAX) NULL,
-    publish_status NVARCHAR(30) NOT NULL CONSTRAINT DF_market_events_publish_status DEFAULT N'DRAFT',
     CONSTRAINT PK_market_events PRIMARY KEY (id),
     CONSTRAINT FK_market_events_users FOREIGN KEY (user_id) REFERENCES dbo.users(id),
     CONSTRAINT FK_market_events_categories FOREIGN KEY (category_id) REFERENCES dbo.categories(id),
     CONSTRAINT CK_market_events_date_range CHECK (end_at >= start_at),
     CONSTRAINT CK_market_events_registration_range CHECK (registration_end_at >= registration_start_at),
-    CONSTRAINT CK_market_events_review_status CHECK (review_status IN (N'PENDING', N'APPROVED', N'REJECTED', N'REVISION_REQUIRED', N'MAP_BUILDING')),
-    CONSTRAINT CK_market_events_publish_status CHECK (publish_status IN (N'DRAFT', N'READY_TO_PUBLISH', N'PUBLISHED', N'BRANDS_PUBLISHED', N'UNPUBLISH_REQUESTED', N'UNPUBLISHED', N'CANCELLED'))
+    CONSTRAINT CK_market_events_workflow_status CHECK (workflow_status IN (N'DRAFT', N'PENDING_REVIEW', N'MAP_BUILDING', N'READY_TO_PUBLISH', N'PUBLISHED', N'UNPUBLISH_REQUESTED', N'UNPUBLISHED', N'CANCELLED'))
 );
 GO
 
 CREATE INDEX IX_market_events_user ON dbo.market_events(user_id);
 CREATE INDEX IX_market_events_dates ON dbo.market_events(start_at, end_at);
 CREATE INDEX IX_market_events_city_category ON dbo.market_events(city, category_id);
-CREATE INDEX IX_market_events_review_status ON dbo.market_events(review_status);
-CREATE INDEX IX_market_events_publish_status ON dbo.market_events(publish_status);
+CREATE INDEX IX_market_events_workflow_status ON dbo.market_events(workflow_status);
 GO
 
 CREATE TABLE dbo.event_unpublish_requests
@@ -731,7 +729,7 @@ EXEC dbo.usp_add_column_description N'market_events', N'summary', N'活動摘要
 EXEC dbo.usp_add_column_description N'market_events', N'description', N'活動介紹';
 EXEC dbo.usp_add_column_description N'market_events', N'location_name', N'地點名稱';
 EXEC dbo.usp_add_column_description N'market_events', N'city', N'縣市';
-EXEC dbo.usp_add_column_description N'market_events', N'district', N'區域';
+EXEC dbo.usp_add_column_description N'market_events', N'district', N'地區';
 EXEC dbo.usp_add_column_description N'market_events', N'address', N'地址';
 EXEC dbo.usp_add_column_description N'market_events', N'traffic_info', N'交通方式';
 EXEC dbo.usp_add_column_description N'market_events', N'notice', N'活動注意事項';
@@ -744,9 +742,9 @@ EXEC dbo.usp_add_column_description N'market_events', N'base_fee', N'基本攤�
 EXEC dbo.usp_add_column_description N'market_events', N'cover_image_url', N'活動封面';
 EXEC dbo.usp_add_column_description N'market_events', N'map_image_url', N'攤位地圖底圖';
 EXEC dbo.usp_add_column_description N'market_events', N'public_info_at', N'公開資訊時間';
-EXEC dbo.usp_add_column_description N'market_events', N'review_status', N'活動審核狀態（PENDING/APPROVED/REJECTED/REVISION_REQUIRED/MAP_BUILDING）';
+EXEC dbo.usp_add_column_description N'market_events', N'brands_public_at', N'品牌名單公開時間';
+EXEC dbo.usp_add_column_description N'market_events', N'workflow_status', N'活動流程狀態（DRAFT/PENDING_REVIEW/MAP_BUILDING/READY_TO_PUBLISH/PUBLISHED/UNPUBLISH_REQUESTED/UNPUBLISHED/CANCELLED）';
 EXEC dbo.usp_add_column_description N'market_events', N'review_note', N'補件原因 / 審核備註';
-EXEC dbo.usp_add_column_description N'market_events', N'publish_status', N'活動發布狀態（DRAFT/READY_TO_PUBLISH/PUBLISHED/BRANDS_PUBLISHED/UNPUBLISH_REQUESTED/UNPUBLISHED/CANCELLED）';
 
 EXEC dbo.usp_add_column_description N'event_unpublish_requests', N'id', N'活動下架申請 ID';
 EXEC dbo.usp_add_column_description N'event_unpublish_requests', N'event_id', N'活動 ID';
