@@ -6,6 +6,15 @@
 
 > 更新日誌請依日期與 branch 分區：日期使用 `###`，branch 使用 `####`，越近的更新放越上面，避免不同分支的更動混在同一段。
 
+### 2026-07-04
+
+#### simon branch
+
+- `market_events` 狀態欄位改為單一 `workflow_status`，取代原本的 `review_status` 與 `publish_status`。
+- `workflow_status` 允許值為 `DRAFT`、`PENDING_REVIEW`、`MAP_BUILDING`、`READY_TO_PUBLISH`、`PUBLISHED`、`UNPUBLISH_REQUESTED`、`UNPUBLISHED`、`CANCELLED`。
+- 新增 `brands_public_at`，品牌名單是否公開改由此時間欄位判斷，不再使用 `BRANDS_PUBLISHED` workflow 狀態。
+- 移除活動流程中的 `REVISION_REQUIRED`；需要補件時回到 `PENDING_REVIEW` 流程處理。
+
 ### 2026-07-02
 
 #### simon branch
@@ -13,8 +22,6 @@
 - 選位資料由 `event_applications.selected_stall_id` 改為 `application_dates.selected_stall_id`，支援同一筆申請單在不同報名日期選擇不同攤位。
 - `application_dates.selected_stall_id` 新增對 `event_stalls.id` 的關聯，並以同日同攤位唯一限制避免同一天重複選位。
 - `event_stalls.status` 保留為攤位本體狀態，只表示攤位是否可用；每日是否被選走改由 `application_dates.selected_stall_id` 搭配 `apply_date` 判斷。
-- `test4.sql` 更新 `MD0101` 多日期選位測資：活動日期為 `2026-08-01` 至 `2026-08-03`，`vendor1` 報名第 1-2 天，`vendor2` 報名第 2-3 天，`vendor3` 至 `vendor12` 三天皆有選位資料。
-- 若需重建乾淨測試資料，可依序執行 `MarketDayDB.sql`、`clear.sql`、`test4.sql`；若只需重匯 `MD0101` 測資，可執行 `clear.sql` 後再執行 `test4.sql`。
 
 ### 2026-06-30
 
@@ -22,7 +29,6 @@
 
 - `event_equipments` 新增 `wattage_limit`，用來記錄電力設備的瓦數上限。
 - 新增 `rental_appliances`，關聯 `equipment_rentals`，記錄 `equipment_rental_id`、`appliance_name`、`wattage`，用來保存租借電力時填寫的電器與瓦數。
-- `clear.sql`、`test3.sql` 同步租借電器瓦數資料，測試資料中的 `現場電源` 會建立 1000W 上限與電器明細。
 - `MarketDayDB.sql` 新增 `event_equipments`，記錄活動可租借設備、租金、計費方式、詳細資訊與庫存數量。
 - `MarketDayDB.sql` 新增 `equipment_rentals`，記錄報名租借設備，並保留租借當下的設備名稱、單價、計費方式、數量與小計。
 - `MarketDayDB.sql` 新增 `status_logs`，透過 `request_log_id` 關聯 API 請求並記錄狀態來源與更新後狀態。
@@ -34,12 +40,12 @@
 - 調整 `market_events` 活動時間欄位：
   - 移除 `start_date`、`end_date`、`start_time`、`end_time`。
   - 改為 `start_at`、`end_at`、`registration_start_at`、`registration_end_at` 四個 `DATETIME2(0)` 欄位。
-  - 同步更新活動日期檢查、索引、欄位註解與 `test.sql`、`test3.sql` 測試資料。
+  - 同步更新活動日期檢查、索引與欄位註解。
 - 調整 `users.status`：
   - 允許值新增 `DISABLED`。
   - 停用帳號使用 `DISABLED`，`IS_DELETED` 保留給刪除或封存語意。
 - 調整活動下架流程：
-  - `market_events.publish_status` 新增 `UNPUBLISH_REQUESTED`。
+  - `market_events` 活動流程狀態支援 `UNPUBLISH_REQUESTED`。
   - 新增 `event_unpublish_requests` 記錄主辦方下架申請、下架原因、管理員審核結果與審核備註。
 - 調整通知中心資料：
   - `notifications` 新增 `is_read`、`read_at`。
@@ -69,11 +75,6 @@
 - 調整報名日期設計：
   - 移除以 `event_sessions`、`application_sessions` 表示報名場次的設計。
   - 改由 `application_dates.apply_date` 記錄攤主實際報名參加日期。
-- 調整 `test3.sql` 測試資料：
-  - 建立 20 個攤主、2 個主辦方、10 個活動與至少 50 筆報名資料。
-  - 測試資料涵蓋 `待審核`、`審核未通過`、`待付款`、`待選位`、`報名完成`、`保證金已退還`、`退款申請中`、`退款處理中`、`已退款`、`已取消`。
-  - `MD0105` 固定設為已結束活動，用於測試活動結束後的保證金狀態。
-  - `MD0105` 的報名資料只保留合理的結束後狀態：`報名完成`、`已取消`、`已退款`。
 - 後端同步注意：
   - `ApplicationStatusService` 會依取消、退款、審核、付款、選位、活動結束與保證金狀態推導前端顯示的 `applicationStatus`。
   - `保證金已退還` 需同時符合已付款、已選位、活動已結束且 `deposit_status = RETURNED`。
