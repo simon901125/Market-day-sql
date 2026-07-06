@@ -6,6 +6,12 @@
 
 > 更新日誌請依日期與 branch 分區：日期使用 `###`，branch 使用 `####`，越近的更新放越上面，避免不同分支的更動混在同一段。
 
+### 2026-07-06
+
+#### simon branch
+
+- `event_equipments` 新增 `charge_type` 與 `item_type`，用來區分活動設備為免費/付費，以及一般設備/用電項目；允許值分別為 `FREE`、`PAID` 與 `EQUIPMENT`、`POWER`。
+
 ### 2026-07-04
 
 #### simon branch

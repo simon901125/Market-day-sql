@@ -333,12 +333,16 @@ CREATE TABLE dbo.event_equipments
     name NVARCHAR(100) NOT NULL,
     rental_fee DECIMAL(10,2) NOT NULL,
     pricing_unit NVARCHAR(20) NOT NULL,
+    charge_type NVARCHAR(20) NOT NULL CONSTRAINT DF_event_equipments_charge_type DEFAULT N'PAID',
+    item_type NVARCHAR(20) NOT NULL CONSTRAINT DF_event_equipments_item_type DEFAULT N'EQUIPMENT',
     description NVARCHAR(1000) NULL,
     stock_quantity INT NULL,
     wattage_limit INT NULL,
     CONSTRAINT PK_event_equipments PRIMARY KEY (id),
     CONSTRAINT FK_event_equipments_market_events FOREIGN KEY (event_id) REFERENCES dbo.market_events(id),
     CONSTRAINT CK_event_equipments_pricing_unit CHECK (pricing_unit IN (N'HOUR', N'DAY')),
+    CONSTRAINT CK_event_equipments_charge_type CHECK (charge_type IN (N'FREE', N'PAID')),
+    CONSTRAINT CK_event_equipments_item_type CHECK (item_type IN (N'EQUIPMENT', N'POWER')),
     CONSTRAINT CK_event_equipments_rental_fee CHECK (rental_fee >= 0),
     CONSTRAINT CK_event_equipments_stock_quantity CHECK (stock_quantity IS NULL OR stock_quantity >= 0),
     CONSTRAINT CK_event_equipments_wattage_limit CHECK (wattage_limit IS NULL OR wattage_limit > 0)
@@ -346,6 +350,7 @@ CREATE TABLE dbo.event_equipments
 GO
 
 CREATE INDEX IX_event_equipments_event ON dbo.event_equipments(event_id);
+CREATE INDEX IX_event_equipments_event_charge_item ON dbo.event_equipments(event_id, charge_type, item_type);
 GO
 
 CREATE TABLE dbo.event_applications
@@ -779,6 +784,8 @@ EXEC dbo.usp_add_column_description N'event_equipments', N'event_id', N'活動 I
 EXEC dbo.usp_add_column_description N'event_equipments', N'name', N'設備名稱';
 EXEC dbo.usp_add_column_description N'event_equipments', N'rental_fee', N'租金';
 EXEC dbo.usp_add_column_description N'event_equipments', N'pricing_unit', N'計費方式：HOUR/DAY';
+EXEC dbo.usp_add_column_description N'event_equipments', N'charge_type', N'收費類型（FREE/PAID）';
+EXEC dbo.usp_add_column_description N'event_equipments', N'item_type', N'項目類型（EQUIPMENT/POWER）';
 EXEC dbo.usp_add_column_description N'event_equipments', N'description', N'設備詳細資訊';
 EXEC dbo.usp_add_column_description N'event_equipments', N'stock_quantity', N'可租借數量';
 EXEC dbo.usp_add_column_description N'event_equipments', N'wattage_limit', N'電力設備瓦數上限';
