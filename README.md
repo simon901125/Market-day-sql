@@ -6,6 +6,15 @@
 
 > 更新日誌請依日期與 branch 分區：日期使用 `###`，branch 使用 `####`，越近的更新放越上面，避免不同分支的更動混在同一段。
 
+### 2026-07-07
+
+#### simon branch
+
+- `payments.payment_no` 欄位註解改為「藍新的 MerchantOrderNo」，並保留唯一約束避免付款訂單號重複。
+- `payments` 新增 `provider_response_code` 與 `provider_message`，用來記錄金流服務商回應代碼與訊息。
+- `refunds.refund_no` 欄位註解改為「藍新退款交易序號」，並保留唯一約束避免退款交易序號重複。
+- `refunds` 新增 `reason` 與 `failed_reason`，用來記錄退款原因與退款失敗原因。
+
 ### 2026-07-06
 
 #### simon branch
