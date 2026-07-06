@@ -19,20 +19,20 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 
 @RestController
-@Tag(name = "Market API", description = "Market event search and detail APIs")
+@Tag(name = "Market API", description = "提供市集活動查詢與篩選功能")
 public class MarketController {
 
     @Autowired
     private MarketEventService marketEventService;
 
-    @Operation(summary = "Search market events", description = "Search published and approved market events by keyword, city, event status, date range, category, and event type.")
+    @Operation(summary = "取得市集活動列表及取得歷史活動列表", description = "依關鍵字、縣市、活動狀態、日期區間、分類與活動類型查詢市集活動列表。")
     @PostMapping("/api/markets/search")
     public ApiResponse<List<MarketEventCardResponse>> searchMarkets(
             @RequestBody MarketSearchRequest request) {
         return marketEventService.searchMarkets(request);
     }
 
-    @Operation(summary = "Get market event detail", description = "Get detail for a published and approved market event by event id.")
+    @Operation(summary = "取得市集活動詳細資料", description = "依市集活動 ID 取得已發布且審核通過的市集活動詳細資料。")
     @GetMapping("/api/markets/{id}")
     public ApiResponse<MarketEventDetailResponse> getMarketDetail(@PathVariable Long id) {
         return marketEventService.getMarketDetail(id);
