@@ -16,11 +16,10 @@ CREATE TABLE dbo.users
 (
     id BIGINT IDENTITY(1,1) NOT NULL,
     role VARCHAR(30) NOT NULL,
-    name NVARCHAR(100) NOT NULL,
     email VARCHAR(255) NOT NULL,
     password_hash VARCHAR(255) NULL,
-    phone VARCHAR(30) NULL,
     provider VARCHAR(30) NOT NULL,
+    google_sub VARCHAR(255) NULL,
     status VARCHAR(30) NOT NULL CONSTRAINT DF_users_status DEFAULT 'UNACTIVE',
     isLogin BIT NOT NULL CONSTRAINT DF_users_isLogin DEFAULT 0,
     email_verified_at DATETIME2(0) NULL,
@@ -30,13 +29,18 @@ CREATE TABLE dbo.users
     CONSTRAINT PK_users PRIMARY KEY (id),
     CONSTRAINT UQ_users_email UNIQUE (email),
     CONSTRAINT CK_users_role CHECK (role IN ('VENDOR', 'ORGANIZER', 'ADMIN')),
-    CONSTRAINT CK_users_provider CHECK (provider IN ('LOCAL', 'GOOGLE')),
+    CONSTRAINT CK_users_provider CHECK (provider IN ('LOCAL', 'GOOGLE', 'BOTH')),
+    CONSTRAINT CK_users_provider_google_sub CHECK (
+        (provider = 'LOCAL' AND google_sub IS NULL)
+        OR (provider IN ('GOOGLE', 'BOTH') AND google_sub IS NOT NULL)
+    ),
     CONSTRAINT CK_users_status CHECK (status IN ('UNACTIVE', 'ACTIVE', 'DISABLED', 'IS_DELETED'))
 );
 GO
 
 CREATE INDEX IX_users_role_status ON dbo.users(role, status);
 CREATE INDEX IX_users_provider ON dbo.users(provider);
+CREATE UNIQUE INDEX UX_users_google_sub ON dbo.users(google_sub) WHERE google_sub IS NOT NULL;
 CREATE INDEX IX_users_isLogin_expired_time ON dbo.users(isLogin, expired_time);
 GO
 
@@ -91,8 +95,8 @@ CREATE TABLE dbo.user_profiles
     user_id BIGINT NOT NULL,
     profile_type NVARCHAR(30) NOT NULL,
     name NVARCHAR(150) NOT NULL,
-    contact_name NVARCHAR(100) NOT NULL,
-    contact_phone NVARCHAR(30) NOT NULL,
+    contact_name NVARCHAR(100) NULL,
+    contact_phone NVARCHAR(30) NULL,
     contact_email NVARCHAR(255) NULL,
     city NVARCHAR(50) NULL,
     district NVARCHAR(50) NULL,
@@ -664,11 +668,10 @@ GO
 
 EXEC dbo.usp_add_column_description N'users', N'id', N'使用者主鍵';
 EXEC dbo.usp_add_column_description N'users', N'role', N'帳號角色（VENDOR/ORGANIZER/ADMIN）';
-EXEC dbo.usp_add_column_description N'users', N'name', N'顯示名稱';
 EXEC dbo.usp_add_column_description N'users', N'email', N'登入 Email';
 EXEC dbo.usp_add_column_description N'users', N'password_hash', N'密碼雜湊值（LOCAL）';
-EXEC dbo.usp_add_column_description N'users', N'phone', N'聯絡電話';
-EXEC dbo.usp_add_column_description N'users', N'provider', N'登入來源（LOCAL/GOOGLE）';
+EXEC dbo.usp_add_column_description N'users', N'provider', N'登入來源（LOCAL/GOOGLE/BOTH）';
+EXEC dbo.usp_add_column_description N'users', N'google_sub', N'Google 帳號唯一識別碼（OIDC subject），GOOGLE/BOTH 必填';
 EXEC dbo.usp_add_column_description N'users', N'status', N'帳號狀態（UNACTIVE/ACTIVE/DISABLED/IS_DELETED）';
 EXEC dbo.usp_add_column_description N'users', N'isLogin', N'是否已有登入中的裝置';
 EXEC dbo.usp_add_column_description N'users', N'email_verified_at', N'Email 驗證完成時間';
@@ -900,7 +903,6 @@ IF NOT EXISTS (
 BEGIN
     INSERT INTO dbo.users (
         role,
-        name,
         email,
         password_hash,
         provider,
@@ -910,7 +912,6 @@ BEGIN
     )
     VALUES (
         'ADMIN',
-        'Admin',
         'admin@marketday.local',
         '$2a$10$jZ5SinwJD56C7PQX8Kj2wORspIPscc5H9Nf9nE1RcKj1j7/.o4QqW',
         'LOCAL',

@@ -1,4 +1,4 @@
-# Market Day SQL
+﻿# Market Day SQL
 
 本資料夾存放小集日 Market Day 專案的 SQL Server 資料庫結構、ERD 圖與測試資料。
 
@@ -9,6 +9,11 @@
 ### 2026-07-07
 
 #### simon branch
+
+- `users` 移除 `name`、`phone`，只保存登入識別、密碼、provider、狀態、自動登出與驗證時間等帳號欄位。
+- `users.provider` 支援 `LOCAL`、`GOOGLE`、`BOTH`，並新增 `google_sub`；`GOOGLE/BOTH` 必須有 `google_sub`，`LOCAL` 不可有 `google_sub`。
+- 新增 `UX_users_google_sub` filtered unique index，確保同一個 Google 帳號最多只能註冊或綁定一個平台帳號。
+- `user_profiles.contact_name`、`contact_phone` 改為可空；註冊時只建立最小 profile 並預填 `name`，聯絡資料留待登入後補齊。
 
 - `payments.payment_no` 欄位註解改為「藍新的 MerchantOrderNo」，並保留唯一約束避免付款訂單號重複。
 - `payments` 新增 `provider_response_code` 與 `provider_message`，用來記錄金流服務商回應代碼與訊息。
@@ -104,9 +109,9 @@
 
 目前包含的核心資料表例如：
 
-- `users`：使用者帳號資料，包含 LOCAL / GOOGLE 登入來源、角色、狀態、`expired_time` 與 `updated_at`
+- `users`：使用者登入帳號資料，包含 email、password_hash、provider（LOCAL/GOOGLE/BOTH）、google_sub、status、isLogin、expired_time、email_verified_at、created_at、updated_at；不保存 name/phone。
 - `categories`：活動與品牌共用分類，不再用 `type` 區分分類用途
-- `user_profiles`：攤主與主辦方共用個人/單位資料，包含聯絡人、電話、Email 與地址
+- `user_profiles`：攤主與主辦方共用基本資料，註冊時先建立 name；contact_name、contact_phone、contact_email、地址等資料可登入後補齊。
 - `vendor_profiles`：攤主品牌專屬資料，包含分類、社群連結、品牌資訊與商品摘要
 - `organizer_profiles`：主辦方專屬資料，包含公司名稱、統一編號與服務時間
 - `vendor_images`：品牌圖片，關聯 `vendor_profiles`，圖片類型包含 `AVATAR`、`COVER`、`GALLERY`
@@ -206,7 +211,7 @@ spring.datasource.url=jdbc:sqlserver://localhost:1433;databaseName=MarketDayDB;e
 - Swagger schema 是否需要同步更新
 - `test.sql`、`test3.sql` 是否需要補測試資料或調整欄位名稱
 
-近期 schema 已調整 `users` 的自動登出與更新時間欄位，並將品牌/主辦方詳細資料拆成 `user_profiles`、`vendor_profiles`、`organizer_profiles`。若後端開始實作這些功能，需同步檢查相關 Entity / DTO / API 文件是否已包含 `expired_time`、`user_profiles`、`vendor_profiles`、`organizer_profiles`、`vendor_profile_id`、`review_status`、`review_note`、`application_dates.selected_stall_id`、`deposit_amount`、`deposit_status`、`event_stalls`、`refunds`、`event_unpublish_requests` 與 `admin_operation_logs`。
+近期 schema 已調整 `users` 與帳號資料邊界：`users` 不再保存 `name`、`phone`，Google 身分使用 `google_sub` 與 `provider = GOOGLE/BOTH` 表示，使用者顯示名稱與聯絡資料改由 `user_profiles` 保存。若後端開始實作這些功能，需同步檢查相關 Entity / DTO / API 文件是否已包含 `expired_time`、`google_sub`、`user_profiles`、`vendor_profiles`、`organizer_profiles`、`vendor_profile_id`、`review_status`、`review_note`、`application_dates.selected_stall_id`、`deposit_amount`、`deposit_status`、`event_stalls`、`refunds`、`event_unpublish_requests` 與 `admin_operation_logs`。
 
 若變更 `users` 欄位，請特別檢查：
 
