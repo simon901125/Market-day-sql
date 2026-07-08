@@ -6,6 +6,17 @@
 
 > 更新日誌請依日期與 branch 分區：日期使用 `###`，branch 使用 `####`，越近的更新放越上面，避免不同分支的更動混在同一段。
 
+### 2026-07-08
+
+#### simon branch
+
+- `market_events` 新增 `create_at`，用來記錄活動建立時間，預設值為 `SYSDATETIME()`。
+- `event_equipments` 新增 `unit`，用來記錄設備租借單位，例如 `張`、`頂`、`組`、`條`；`EQUIPMENT` 類型必填，`POWER` 類型需為 `NULL`。
+- `event_equipments` 新增 `per_stall_rental_limit`，用來限制單一攤位可租借的數量上限。
+- `event_equipments` 新增 `rental_status`，用來控制設備是否開放租借，允許值為 `ACTIVE`、`UNACTIVE`，預設為 `ACTIVE`。
+- `equipment_rentals` 新增 `unit`，保存租借當下的設備單位快照，避免活動設備日後調整單位時影響歷史報名紀錄。
+- 設備租借數量語意調整：`quantity` 表示租借幾個 `unit`，`pricing_unit` 與 `rental_units` 仍負責時間計費，例如 `2 組 x 2 天`。
+
 ### 2026-07-07
 
 #### simon branch
@@ -116,12 +127,14 @@
 - `organizer_profiles`：主辦方專屬資料，包含公司名稱、統一編號與服務時間
 - `vendor_images`：品牌圖片，關聯 `vendor_profiles`，圖片類型包含 `AVATAR`、`COVER`、`GALLERY`
 - `vendor_products`：品牌商品，關聯 `vendor_profiles`
-- `market_events`：市集活動，包含活動時間、報名時間、發布狀態與活動審核狀態
+- `market_events`：市集活動，包含活動時間、報名時間、活動流程狀態與活動建立時間
 - `event_unpublish_requests`：活動下架申請，記錄主辦方申請原因與管理員審核結果
 - `event_images`：活動圖片
 - `event_stall_zones`：活動攤位分區
 - `event_stalls`：活動攤位，可記錄攤位尺寸、編號與攤位本體狀態
+- `event_equipments`：活動可租借設備與用電項目，包含租金、計費方式、租借單位、庫存、單攤租借上限、租借狀態與瓦數上限
 - `event_applications`：攤主活動報名，包含保證金、報名審核備註與報名建立時間
+- `equipment_rentals`：報名租借設備，保存租借當下的設備名稱、單價、計費方式、單位、數量、計費單位數與小計
 - `application_dates`：報名參加日期，一筆報名可選擇活動中的多個日期，並在每個日期記錄選擇的攤位
 - `payments`：付款紀錄
 - `refunds`：退款紀錄，關聯報名與原付款紀錄
