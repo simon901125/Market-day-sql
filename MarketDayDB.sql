@@ -243,6 +243,7 @@ CREATE TABLE dbo.market_events
     brands_public_at DATETIME2(0) NULL,
     workflow_status NVARCHAR(30) NOT NULL CONSTRAINT DF_market_events_workflow_status DEFAULT N'DRAFT',
     review_note NVARCHAR(MAX) NULL,
+    create_at DATETIME2(0) NOT NULL CONSTRAINT DF_market_events_create_at DEFAULT SYSDATETIME(),
     CONSTRAINT PK_market_events PRIMARY KEY (id),
     CONSTRAINT FK_market_events_users FOREIGN KEY (user_id) REFERENCES dbo.users(id),
     CONSTRAINT FK_market_events_categories FOREIGN KEY (category_id) REFERENCES dbo.categories(id),
@@ -337,24 +338,34 @@ CREATE TABLE dbo.event_equipments
     name NVARCHAR(100) NOT NULL,
     rental_fee DECIMAL(10,2) NOT NULL,
     pricing_unit NVARCHAR(20) NOT NULL,
+    unit NVARCHAR(20) NULL,
     charge_type NVARCHAR(20) NOT NULL CONSTRAINT DF_event_equipments_charge_type DEFAULT N'PAID',
     item_type NVARCHAR(20) NOT NULL CONSTRAINT DF_event_equipments_item_type DEFAULT N'EQUIPMENT',
     description NVARCHAR(1000) NULL,
     stock_quantity INT NULL,
+    per_stall_rental_limit INT NULL,
+    rental_status NVARCHAR(20) NOT NULL CONSTRAINT DF_event_equipments_rental_status DEFAULT N'ACTIVE',
     wattage_limit INT NULL,
     CONSTRAINT PK_event_equipments PRIMARY KEY (id),
     CONSTRAINT FK_event_equipments_market_events FOREIGN KEY (event_id) REFERENCES dbo.market_events(id),
     CONSTRAINT CK_event_equipments_pricing_unit CHECK (pricing_unit IN (N'HOUR', N'DAY')),
     CONSTRAINT CK_event_equipments_charge_type CHECK (charge_type IN (N'FREE', N'PAID')),
     CONSTRAINT CK_event_equipments_item_type CHECK (item_type IN (N'EQUIPMENT', N'POWER')),
+    CONSTRAINT CK_event_equipments_unit_item_type CHECK (
+        (item_type = N'EQUIPMENT' AND unit IS NOT NULL)
+        OR (item_type <> N'EQUIPMENT' AND unit IS NULL)
+    ),
     CONSTRAINT CK_event_equipments_rental_fee CHECK (rental_fee >= 0),
     CONSTRAINT CK_event_equipments_stock_quantity CHECK (stock_quantity IS NULL OR stock_quantity >= 0),
+    CONSTRAINT CK_event_equipments_per_stall_rental_limit CHECK (per_stall_rental_limit IS NULL OR per_stall_rental_limit > 0),
+    CONSTRAINT CK_event_equipments_rental_status CHECK (rental_status IN (N'ACTIVE', N'UNACTIVE')),
     CONSTRAINT CK_event_equipments_wattage_limit CHECK (wattage_limit IS NULL OR wattage_limit > 0)
 );
 GO
 
 CREATE INDEX IX_event_equipments_event ON dbo.event_equipments(event_id);
 CREATE INDEX IX_event_equipments_event_charge_item ON dbo.event_equipments(event_id, charge_type, item_type);
+CREATE INDEX IX_event_equipments_event_rental_status ON dbo.event_equipments(event_id, rental_status);
 GO
 
 CREATE TABLE dbo.event_applications
@@ -402,6 +413,7 @@ CREATE TABLE dbo.equipment_rentals
     equipment_name NVARCHAR(100) NOT NULL,
     rental_fee DECIMAL(10,2) NOT NULL,
     pricing_unit NVARCHAR(20) NOT NULL,
+    unit NVARCHAR(20) NULL,
     quantity INT NOT NULL,
     rental_units INT NOT NULL,
     subtotal DECIMAL(10,2) NOT NULL,
@@ -757,6 +769,7 @@ EXEC dbo.usp_add_column_description N'market_events', N'public_info_at', N'公�
 EXEC dbo.usp_add_column_description N'market_events', N'brands_public_at', N'品牌名單公開時間';
 EXEC dbo.usp_add_column_description N'market_events', N'workflow_status', N'活動流程狀態（DRAFT/PENDING_REVIEW/REVISION_REQUIRED/MAP_BUILDING/READY_TO_PUBLISH/PUBLISHED/FINAL_REVIEW/UNPUBLISH_REQUESTED/UNPUBLISHED/CANCELLED）';
 EXEC dbo.usp_add_column_description N'market_events', N'review_note', N'補件原因 / 審核備註';
+EXEC dbo.usp_add_column_description N'market_events', N'create_at', N'活動建立時間';
 
 EXEC dbo.usp_add_column_description N'event_unpublish_requests', N'id', N'活動下架申請 ID';
 EXEC dbo.usp_add_column_description N'event_unpublish_requests', N'event_id', N'活動 ID';
@@ -790,11 +803,14 @@ EXEC dbo.usp_add_column_description N'event_equipments', N'id', N'活動設備 I
 EXEC dbo.usp_add_column_description N'event_equipments', N'event_id', N'活動 ID';
 EXEC dbo.usp_add_column_description N'event_equipments', N'name', N'設備名稱';
 EXEC dbo.usp_add_column_description N'event_equipments', N'rental_fee', N'租金';
-EXEC dbo.usp_add_column_description N'event_equipments', N'pricing_unit', N'計費方式：HOUR/DAY';
+EXEC dbo.usp_add_column_description N'event_equipments', N'pricing_unit', N'時間計費方式：HOUR/DAY';
+EXEC dbo.usp_add_column_description N'event_equipments', N'unit', N'租借單位名稱，例如：張、頂、組、條；EQUIPMENT 必填，POWER 為 NULL';
 EXEC dbo.usp_add_column_description N'event_equipments', N'charge_type', N'收費類型（FREE/PAID）';
 EXEC dbo.usp_add_column_description N'event_equipments', N'item_type', N'項目類型（EQUIPMENT/POWER）';
 EXEC dbo.usp_add_column_description N'event_equipments', N'description', N'設備詳細資訊';
 EXEC dbo.usp_add_column_description N'event_equipments', N'stock_quantity', N'可租借數量';
+EXEC dbo.usp_add_column_description N'event_equipments', N'per_stall_rental_limit', N'單一攤位租借上限';
+EXEC dbo.usp_add_column_description N'event_equipments', N'rental_status', N'租借狀態（ACTIVE/UNACTIVE）';
 EXEC dbo.usp_add_column_description N'event_equipments', N'wattage_limit', N'電力設備瓦數上限';
 
 EXEC dbo.usp_add_column_description N'event_applications', N'id', N'報名 ID';
@@ -820,6 +836,7 @@ EXEC dbo.usp_add_column_description N'equipment_rentals', N'event_equipment_id',
 EXEC dbo.usp_add_column_description N'equipment_rentals', N'equipment_name', N'租借時設備名稱';
 EXEC dbo.usp_add_column_description N'equipment_rentals', N'rental_fee', N'租借時單價';
 EXEC dbo.usp_add_column_description N'equipment_rentals', N'pricing_unit', N'租借時計費方式：HOUR/DAY';
+EXEC dbo.usp_add_column_description N'equipment_rentals', N'unit', N'租借時單位名稱快照，例如：張、頂、組、條';
 EXEC dbo.usp_add_column_description N'equipment_rentals', N'quantity', N'租借數量';
 EXEC dbo.usp_add_column_description N'equipment_rentals', N'rental_units', N'計費單位數';
 EXEC dbo.usp_add_column_description N'equipment_rentals', N'subtotal', N'租借小計';
