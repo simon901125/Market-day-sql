@@ -335,6 +335,7 @@ CREATE TABLE dbo.event_equipments
 (
     id BIGINT IDENTITY(1,1) NOT NULL,
     event_id BIGINT NOT NULL,
+    equipment_group_key NVARCHAR(100) NULL,
     name NVARCHAR(100) NOT NULL,
     rental_fee DECIMAL(10,2) NOT NULL,
     pricing_unit NVARCHAR(20) NOT NULL,
@@ -359,11 +360,13 @@ CREATE TABLE dbo.event_equipments
     CONSTRAINT CK_event_equipments_stock_quantity CHECK (stock_quantity IS NULL OR stock_quantity >= 0),
     CONSTRAINT CK_event_equipments_per_stall_rental_limit CHECK (per_stall_rental_limit IS NULL OR per_stall_rental_limit > 0),
     CONSTRAINT CK_event_equipments_rental_status CHECK (rental_status IN (N'ACTIVE', N'UNACTIVE')),
+    CONSTRAINT CK_event_equipments_group_key CHECK (equipment_group_key IS NULL OR LTRIM(RTRIM(equipment_group_key)) <> N''),
     CONSTRAINT CK_event_equipments_wattage_limit CHECK (wattage_limit IS NULL OR wattage_limit > 0)
 );
 GO
 
 CREATE INDEX IX_event_equipments_event ON dbo.event_equipments(event_id);
+CREATE INDEX IX_event_equipments_event_group_key ON dbo.event_equipments(event_id, equipment_group_key);
 CREATE INDEX IX_event_equipments_event_charge_item ON dbo.event_equipments(event_id, charge_type, item_type);
 CREATE INDEX IX_event_equipments_event_rental_status ON dbo.event_equipments(event_id, rental_status);
 GO
@@ -801,6 +804,7 @@ EXEC dbo.usp_add_column_description N'event_stalls', N'status', N'攤位狀態�
 
 EXEC dbo.usp_add_column_description N'event_equipments', N'id', N'活動設備 ID';
 EXEC dbo.usp_add_column_description N'event_equipments', N'event_id', N'活動 ID';
+EXEC dbo.usp_add_column_description N'event_equipments', N'equipment_group_key', N'設備群組識別，用於合併同一品項的免費與付費設定';
 EXEC dbo.usp_add_column_description N'event_equipments', N'name', N'設備名稱';
 EXEC dbo.usp_add_column_description N'event_equipments', N'rental_fee', N'租金';
 EXEC dbo.usp_add_column_description N'event_equipments', N'pricing_unit', N'時間計費方式：HOUR/DAY';
