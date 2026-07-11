@@ -10,10 +10,20 @@
 
 #### simon branch
 
+- 新增 `test10.sql`，提供公開品牌 API 測試資料：50 筆品牌、每品牌 10 筆商品、10 筆測試活動，每個品牌皆參與所有測試活動，活動時間包含已結束、進行中與未開始。
+- 新增 `test11.sql`，提供主辦方 profile API 測試資料：建立 1 筆主辦方帳號、共用聯絡/地址資料與主辦方公司/服務時間資料；測試帳號為 `organizer1@example.test`，密碼為 `a12345678`。
 - `market_events` 移除 `traffic_info`，交通資訊改由 `event_traffic_infos` 保存。
 - 新增 `event_traffic_infos`，以 `event_id` 關聯活動，並用 `traffic_title`、`traffic_details` 保存多筆交通方式與詳細資訊。
 - `event_applications` 移除 `review_note`，報名退件原因改由 `application_review_notes` 保存。
 - 新增 `application_review_notes`，以 `application_id` 關聯報名，並用 `review_note`、`review_note_detail` 保存一組退件原因與詳細說明。
+- `vendor_profiles` 新增 `brand_summary` 保存品牌簡述，原 `brand_description` 語意調整為品牌介紹。
+- `vendor_profiles` 新增 `brand_name` 保存品牌名稱；品牌名稱不再使用 `user_profiles.name`。
+- `vendor_profiles` 移除 `brand_type`，品牌類型統一由 `category_id` 關聯 `categories` 取得。
+- `vendor_profiles` 移除 `product_summary`，品牌特色商品改由 `vendor_products` 保存詳細資料。
+- `vendor_products` 新增 `is_featured`，用來標記特色商品；顯示排序由後端查詢邏輯決定。
+- `organizer_profiles` 新增 `organizer_name` 保存主辦方名稱；主辦方名稱不再使用 `user_profiles.name`。
+- `user_profiles` 移除 `name`，只保留共用聯絡人、電話、Email、縣市、地區與地址等資料。
+- `user_profiles.address` 只保存詳細地址原文，不負責組合縣市與地區；後端回傳主辦資料時也直接回傳此欄位。
 - 後端同步注意：
   - 主辦方報名審核退件 API 不再將退件原因包成 JSON 寫入 `event_applications.review_note`。
   - `GET /api/organizer/applications/{id}` 需從 `application_review_notes` 取最新一筆退件原因並回傳 `reviewNote`、`reviewNoteDetail`。
@@ -37,7 +47,7 @@
 - `users` 移除 `name`、`phone`，只保存登入識別、密碼、provider、狀態、自動登出與驗證時間等帳號欄位。
 - `users.provider` 支援 `LOCAL`、`GOOGLE`、`BOTH`，並新增 `google_sub`；`GOOGLE/BOTH` 必須有 `google_sub`，`LOCAL` 不可有 `google_sub`。
 - 新增 `UX_users_google_sub` filtered unique index，確保同一個 Google 帳號最多只能註冊或綁定一個平台帳號。
-- `user_profiles.contact_name`、`contact_phone` 改為可空；註冊時只建立最小 profile 並預填 `name`，聯絡資料留待登入後補齊。
+- `user_profiles.contact_name`、`contact_phone` 改為可空；註冊時只建立最小共用 profile，名稱改由 `vendor_profiles.brand_name` 或 `organizer_profiles.organizer_name` 保存。
 
 - `payments.payment_no` 欄位註解改為「藍新的 MerchantOrderNo」，並保留唯一約束避免付款訂單號重複。
 - `payments` 新增 `provider_response_code` 與 `provider_message`，用來記錄金流服務商回應代碼與訊息。
@@ -135,11 +145,11 @@
 
 - `users`：使用者登入帳號資料，包含 email、password_hash、provider（LOCAL/GOOGLE/BOTH）、google_sub、status、isLogin、expired_time、email_verified_at、created_at、updated_at；不保存 name/phone。
 - `categories`：活動與品牌共用分類，不再用 `type` 區分分類用途
-- `user_profiles`：攤主與主辦方共用基本資料，註冊時先建立 name；contact_name、contact_phone、contact_email、地址等資料可登入後補齊。
-- `vendor_profiles`：攤主品牌專屬資料，包含分類、社群連結、品牌資訊與商品摘要
-- `organizer_profiles`：主辦方專屬資料，包含公司名稱、統一編號與服務時間
+- `user_profiles`：攤主與主辦方共用聯絡資料，包含 contact_name、contact_phone、contact_email、地址等資料。
+- `vendor_profiles`：攤主品牌專屬資料，包含品牌名稱、分類、社群連結、品牌簡述與品牌介紹
+- `organizer_profiles`：主辦方專屬資料，包含主辦方名稱、公司名稱、統一編號與服務時間
 - `vendor_images`：品牌圖片，關聯 `vendor_profiles`，圖片類型包含 `AVATAR`、`COVER`、`GALLERY`
-- `vendor_products`：品牌商品，關聯 `vendor_profiles`
+- `vendor_products`：品牌商品，關聯 `vendor_profiles`，可用 `is_featured` 標記特色商品
 - `market_events`：市集活動，包含活動時間、報名時間、活動流程狀態與活動建立時間
 - `event_traffic_infos`：活動交通資訊，關聯 `market_events`，一個活動可保存多筆交通方式與詳細資訊
 - `event_unpublish_requests`：活動下架申請，記錄主辦方申請原因與管理員審核結果
@@ -178,6 +188,34 @@
 
 建議在執行完 `MarketDayDB.sql` 建立資料表後，再執行 `test.sql`。
 
+### `test10.sql`
+
+`test10.sql` 放置公開品牌 API 測試資料，主要用於測試：
+
+- `GET /api/brands/search`
+- `GET /api/brands/{id}`
+- `GET /api/brands/scroll-options`
+
+資料內容包含 50 筆品牌、每品牌 10 筆商品、每品牌 2-3 筆特色商品、10 筆測試市集活動，以及每個品牌參與所有測試活動的報名資料。活動時間刻意分成已結束、進行中與未開始，方便驗證品牌詳情中的歷史參與市集只統計 `end_at < now` 的活動。
+
+### `test11.sql`
+
+`test11.sql` 放置主辦方 profile API 測試資料，主要用於測試：
+
+- `GET /api/organizer/profile/load`
+- `POST /api/organizer/profile/save`
+
+測試帳號：
+
+```json
+{
+  "email": "organizer1@example.test",
+  "password": "a12345678"
+}
+```
+
+資料內容包含一筆 `users` 主辦方帳號、一筆 `user_profiles` 聯絡與地址資料，以及一筆 `organizer_profiles` 主辦方名稱、公司/團體名稱、統一編號、服務日期與服務時間資料。
+
 ### `categories.sql`
 
 `categories.sql` 放置前台分類篩選會使用的共用分類資料，包含：
@@ -202,6 +240,7 @@
 1. MarketDayDB.sql
 2. categories.sql
 3. test.sql
+4. 視測試需求執行 test10.sql 或 test11.sql
 ```
 
 需要重新建立資料庫：
@@ -211,6 +250,7 @@
 2. MarketDayDB.sql
 3. categories.sql
 4. test.sql
+5. 視測試需求執行 test10.sql 或 test11.sql
 ```
 
 ## 與後端程式的關聯
@@ -237,9 +277,9 @@ spring.datasource.url=jdbc:sqlserver://localhost:1433;databaseName=MarketDayDB;e
 - 後端 Java class 是否需要新增或調整欄位
 - API request / response 是否需要更新
 - Swagger schema 是否需要同步更新
-- `test.sql`、`test3.sql` 是否需要補測試資料或調整欄位名稱
+- `test.sql`、`test3.sql`、`test10.sql`、`test11.sql` 是否需要補測試資料或調整欄位名稱
 
-近期 schema 已調整 `users` 與帳號資料邊界：`users` 不再保存 `name`、`phone`，Google 身分使用 `google_sub` 與 `provider = GOOGLE/BOTH` 表示，使用者顯示名稱與聯絡資料改由 `user_profiles` 保存。若後端開始實作這些功能，需同步檢查相關 Entity / DTO / API 文件是否已包含 `expired_time`、`google_sub`、`user_profiles`、`vendor_profiles`、`organizer_profiles`、`vendor_profile_id`、`review_status`、`application_review_notes`、`application_dates.selected_stall_id`、`deposit_amount`、`deposit_status`、`event_stalls`、`event_traffic_infos`、`refunds`、`event_unpublish_requests` 與 `admin_operation_logs`。
+近期 schema 已調整 `users` 與帳號資料邊界：`users` 不再保存 `name`、`phone`，Google 身分使用 `google_sub` 與 `provider = GOOGLE/BOTH` 表示，使用者顯示名稱改由 `vendor_profiles.brand_name` 或 `organizer_profiles.organizer_name` 保存，聯絡資料改由 `user_profiles` 保存。若後端開始實作這些功能，需同步檢查相關 Entity / DTO / API 文件是否已包含 `expired_time`、`google_sub`、`user_profiles`、`vendor_profiles`、`organizer_profiles`、`vendor_profile_id`、`review_status`、`application_review_notes`、`application_dates.selected_stall_id`、`deposit_amount`、`deposit_status`、`event_stalls`、`event_traffic_infos`、`refunds`、`event_unpublish_requests` 與 `admin_operation_logs`。
 
 若變更 `users` 欄位，請特別檢查：
 

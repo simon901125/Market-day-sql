@@ -94,7 +94,6 @@ CREATE TABLE dbo.user_profiles
     id BIGINT IDENTITY(1,1) NOT NULL,
     user_id BIGINT NOT NULL,
     profile_type NVARCHAR(30) NOT NULL,
-    name NVARCHAR(150) NOT NULL,
     contact_name NVARCHAR(100) NULL,
     contact_phone NVARCHAR(30) NULL,
     contact_email NVARCHAR(255) NULL,
@@ -115,12 +114,12 @@ CREATE TABLE dbo.vendor_profiles
     id BIGINT IDENTITY(1,1) NOT NULL,
     user_profile_id BIGINT NOT NULL,
     category_id BIGINT NOT NULL,
+    brand_name NVARCHAR(150) NULL,
     instagram_url NVARCHAR(500) NULL,
     facebook_url NVARCHAR(500) NULL,
     website_url NVARCHAR(500) NULL,
+    brand_summary NVARCHAR(300) NULL,
     brand_description NVARCHAR(MAX) NULL,
-    brand_type NVARCHAR(100) NULL,
-    product_summary NVARCHAR(MAX) NULL,
     CONSTRAINT PK_vendor_profiles PRIMARY KEY (id),
     CONSTRAINT UQ_vendor_profiles_user_profile UNIQUE (user_profile_id),
     CONSTRAINT FK_vendor_profiles_user_profiles FOREIGN KEY (user_profile_id) REFERENCES dbo.user_profiles(id),
@@ -135,6 +134,7 @@ CREATE TABLE dbo.organizer_profiles
 (
     id BIGINT IDENTITY(1,1) NOT NULL,
     user_profile_id BIGINT NOT NULL,
+    organizer_name NVARCHAR(150) NULL,
     company_name NVARCHAR(150) NULL,
     tax_id NVARCHAR(20) NULL,
     service_days NVARCHAR(100) NULL,
@@ -210,11 +210,16 @@ CREATE TABLE dbo.vendor_products
     description NVARCHAR(MAX) NULL,
     price DECIMAL(10,2) NULL,
     image_url NVARCHAR(500) NULL,
+    is_featured BIT NOT NULL CONSTRAINT DF_vendor_products_is_featured DEFAULT 0,
     status NVARCHAR(30) NOT NULL,
     CONSTRAINT PK_vendor_products PRIMARY KEY (id),
     CONSTRAINT FK_vendor_products_vendor_profiles FOREIGN KEY (vendor_profile_id) REFERENCES dbo.vendor_profiles(id),
     CONSTRAINT CK_vendor_products_status CHECK (status IN (N'ACTIVE', N'HIDDEN'))
 );
+GO
+
+CREATE INDEX IX_vendor_products_vendor_status_featured
+ON dbo.vendor_products(vendor_profile_id, status, is_featured);
 GO
 
 CREATE TABLE dbo.market_events
@@ -735,7 +740,6 @@ EXEC dbo.usp_add_column_description N'categories', N'is_active', N'是否啟用'
 EXEC dbo.usp_add_column_description N'user_profiles', N'id', N'個人資料 ID';
 EXEC dbo.usp_add_column_description N'user_profiles', N'user_id', N'使用者 ID';
 EXEC dbo.usp_add_column_description N'user_profiles', N'profile_type', N'資料類型（VENDOR/ORGANIZER）';
-EXEC dbo.usp_add_column_description N'user_profiles', N'name', N'名稱';
 EXEC dbo.usp_add_column_description N'user_profiles', N'contact_name', N'聯絡人';
 EXEC dbo.usp_add_column_description N'user_profiles', N'contact_phone', N'聯絡電話';
 EXEC dbo.usp_add_column_description N'user_profiles', N'contact_email', N'聯絡 Email';
@@ -746,15 +750,16 @@ EXEC dbo.usp_add_column_description N'user_profiles', N'address', N'詳細地址
 EXEC dbo.usp_add_column_description N'vendor_profiles', N'id', N'攤主品牌資料 ID';
 EXEC dbo.usp_add_column_description N'vendor_profiles', N'user_profile_id', N'共用個人資料 ID';
 EXEC dbo.usp_add_column_description N'vendor_profiles', N'category_id', N'品牌分類 ID';
+EXEC dbo.usp_add_column_description N'vendor_profiles', N'brand_name', N'品牌名稱';
 EXEC dbo.usp_add_column_description N'vendor_profiles', N'instagram_url', N'Instagram';
 EXEC dbo.usp_add_column_description N'vendor_profiles', N'facebook_url', N'Facebook';
 EXEC dbo.usp_add_column_description N'vendor_profiles', N'website_url', N'官方網站';
-EXEC dbo.usp_add_column_description N'vendor_profiles', N'brand_description', N'品牌資訊';
-EXEC dbo.usp_add_column_description N'vendor_profiles', N'brand_type', N'品牌類型';
-EXEC dbo.usp_add_column_description N'vendor_profiles', N'product_summary', N'品牌商品摘要';
+EXEC dbo.usp_add_column_description N'vendor_profiles', N'brand_summary', N'品牌簡述';
+EXEC dbo.usp_add_column_description N'vendor_profiles', N'brand_description', N'品牌介紹';
 
 EXEC dbo.usp_add_column_description N'organizer_profiles', N'id', N'主辦方資料 ID';
 EXEC dbo.usp_add_column_description N'organizer_profiles', N'user_profile_id', N'共用個人資料 ID';
+EXEC dbo.usp_add_column_description N'organizer_profiles', N'organizer_name', N'主辦方名稱';
 EXEC dbo.usp_add_column_description N'organizer_profiles', N'company_name', N'公司名稱';
 EXEC dbo.usp_add_column_description N'organizer_profiles', N'tax_id', N'統一編號';
 EXEC dbo.usp_add_column_description N'organizer_profiles', N'service_days', N'服務星期';
@@ -773,6 +778,7 @@ EXEC dbo.usp_add_column_description N'vendor_products', N'short_description', N'
 EXEC dbo.usp_add_column_description N'vendor_products', N'description', N'商品介紹';
 EXEC dbo.usp_add_column_description N'vendor_products', N'price', N'商品價格';
 EXEC dbo.usp_add_column_description N'vendor_products', N'image_url', N'商品圖片';
+EXEC dbo.usp_add_column_description N'vendor_products', N'is_featured', N'是否為特色商品';
 EXEC dbo.usp_add_column_description N'vendor_products', N'status', N'商品狀態';
 
 EXEC dbo.usp_add_column_description N'market_events', N'id', N'活動 ID';
