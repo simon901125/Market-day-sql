@@ -6,6 +6,19 @@
 
 > 更新日誌請依日期與 branch 分區：日期使用 `###`，branch 使用 `####`，越近的更新放越上面，避免不同分支的更動混在同一段。
 
+### 2026-07-11
+
+#### simon branch
+
+- `market_events` 移除 `traffic_info`，交通資訊改由 `event_traffic_infos` 保存。
+- 新增 `event_traffic_infos`，以 `event_id` 關聯活動，並用 `traffic_title`、`traffic_details` 保存多筆交通方式與詳細資訊。
+- `event_applications` 移除 `review_note`，報名退件原因改由 `application_review_notes` 保存。
+- 新增 `application_review_notes`，以 `application_id` 關聯報名，並用 `review_note`、`review_note_detail` 保存一組退件原因與詳細說明。
+- 後端同步注意：
+  - 主辦方報名審核退件 API 不再將退件原因包成 JSON 寫入 `event_applications.review_note`。
+  - `GET /api/organizer/applications/{id}` 需從 `application_review_notes` 取最新一筆退件原因並回傳 `reviewNote`、`reviewNoteDetail`。
+  - 目前公開活動詳情 API `GET /api/markets/{id}` 仍有舊的 `trafficInfo` 回傳欄位，後續需改查 `event_traffic_infos`。
+
 ### 2026-07-08
 
 #### simon branch
@@ -128,12 +141,14 @@
 - `vendor_images`：品牌圖片，關聯 `vendor_profiles`，圖片類型包含 `AVATAR`、`COVER`、`GALLERY`
 - `vendor_products`：品牌商品，關聯 `vendor_profiles`
 - `market_events`：市集活動，包含活動時間、報名時間、活動流程狀態與活動建立時間
+- `event_traffic_infos`：活動交通資訊，關聯 `market_events`，一個活動可保存多筆交通方式與詳細資訊
 - `event_unpublish_requests`：活動下架申請，記錄主辦方申請原因與管理員審核結果
 - `event_images`：活動圖片
 - `event_stall_zones`：活動攤位分區
 - `event_stalls`：活動攤位，可記錄攤位尺寸、編號與攤位本體狀態
 - `event_equipments`：活動可租借設備與用電項目，包含租金、計費方式、租借單位、庫存、單攤租借上限、租借狀態與瓦數上限
-- `event_applications`：攤主活動報名，包含保證金、報名審核備註與報名建立時間
+- `event_applications`：攤主活動報名，包含保證金、報名審核狀態與報名建立時間
+- `application_review_notes`：報名審核退件原因，關聯 `event_applications`，保存退件原因與詳細說明
 - `equipment_rentals`：報名租借設備，保存租借當下的設備名稱、單價、計費方式、單位、數量、計費單位數與小計
 - `application_dates`：報名參加日期，一筆報名可選擇活動中的多個日期，並在每個日期記錄選擇的攤位
 - `payments`：付款紀錄
@@ -224,7 +239,7 @@ spring.datasource.url=jdbc:sqlserver://localhost:1433;databaseName=MarketDayDB;e
 - Swagger schema 是否需要同步更新
 - `test.sql`、`test3.sql` 是否需要補測試資料或調整欄位名稱
 
-近期 schema 已調整 `users` 與帳號資料邊界：`users` 不再保存 `name`、`phone`，Google 身分使用 `google_sub` 與 `provider = GOOGLE/BOTH` 表示，使用者顯示名稱與聯絡資料改由 `user_profiles` 保存。若後端開始實作這些功能，需同步檢查相關 Entity / DTO / API 文件是否已包含 `expired_time`、`google_sub`、`user_profiles`、`vendor_profiles`、`organizer_profiles`、`vendor_profile_id`、`review_status`、`review_note`、`application_dates.selected_stall_id`、`deposit_amount`、`deposit_status`、`event_stalls`、`refunds`、`event_unpublish_requests` 與 `admin_operation_logs`。
+近期 schema 已調整 `users` 與帳號資料邊界：`users` 不再保存 `name`、`phone`，Google 身分使用 `google_sub` 與 `provider = GOOGLE/BOTH` 表示，使用者顯示名稱與聯絡資料改由 `user_profiles` 保存。若後端開始實作這些功能，需同步檢查相關 Entity / DTO / API 文件是否已包含 `expired_time`、`google_sub`、`user_profiles`、`vendor_profiles`、`organizer_profiles`、`vendor_profile_id`、`review_status`、`application_review_notes`、`application_dates.selected_stall_id`、`deposit_amount`、`deposit_status`、`event_stalls`、`event_traffic_infos`、`refunds`、`event_unpublish_requests` 與 `admin_operation_logs`。
 
 若變更 `users` 欄位，請特別檢查：
 
