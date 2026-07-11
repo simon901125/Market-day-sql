@@ -1,292 +1,235 @@
-# Market Day API
+﻿# Market Day SQL
 
-Market Day 後端 API 專案，使用 Spring Boot 建置，包含帳號註冊、登入、Google 登入、JWT 驗證、攤位選擇、活動攤位狀態、主辦方資料與主辦方申請查詢。
+本資料夾存放小集日 Market Day 專案的 SQL Server 資料庫結構、ERD 圖與測試資料。
 
 ## 更新日誌
 
-> 更新日誌請依日期與 branch 分區：日期使用 `###`，branch 使用 `####`，避免不同分支的更動混在同一段。
+> 更新日誌請依日期與 branch 分區：日期使用 `###`，branch 使用 `####`，越近的更新放越上面，避免不同分支的更動混在同一段。
+
+### 2026-07-08
+
+#### simon branch
+
+- `market_events` 新增 `create_at`，用來記錄活動建立時間，預設值為 `SYSDATETIME()`。
+- `event_equipments` 新增 `unit`，用來記錄設備租借單位，例如 `張`、`頂`、`組`、`條`；`EQUIPMENT` 類型必填，`POWER` 類型需為 `NULL`。
+- `event_equipments` 新增 `per_stall_rental_limit`，用來限制單一攤位可租借的數量上限。
+- `event_equipments` 新增 `rental_status`，用來控制設備是否開放租借，允許值為 `ACTIVE`、`UNACTIVE`，預設為 `ACTIVE`。
+- `equipment_rentals` 新增 `unit`，保存租借當下的設備單位快照，避免活動設備日後調整單位時影響歷史報名紀錄。
+- 設備租借數量語意調整：`quantity` 表示租借幾個 `unit`，`pricing_unit` 與 `rental_units` 仍負責時間計費，例如 `2 組 x 2 天`。
+
+### 2026-07-07
+
+#### simon branch
+
+- `users` 移除 `name`、`phone`，只保存登入識別、密碼、provider、狀態、自動登出與驗證時間等帳號欄位。
+- `users.provider` 支援 `LOCAL`、`GOOGLE`、`BOTH`，並新增 `google_sub`；`GOOGLE/BOTH` 必須有 `google_sub`，`LOCAL` 不可有 `google_sub`。
+- 新增 `UX_users_google_sub` filtered unique index，確保同一個 Google 帳號最多只能註冊或綁定一個平台帳號。
+- `user_profiles.contact_name`、`contact_phone` 改為可空；註冊時只建立最小 profile 並預填 `name`，聯絡資料留待登入後補齊。
+
+- `payments.payment_no` 欄位註解改為「藍新的 MerchantOrderNo」，並保留唯一約束避免付款訂單號重複。
+- `payments` 新增 `provider_response_code` 與 `provider_message`，用來記錄金流服務商回應代碼與訊息。
+- `refunds.refund_no` 欄位註解改為「藍新退款交易序號」，並保留唯一約束避免退款交易序號重複。
+- `refunds` 新增 `reason` 與 `failed_reason`，用來記錄退款原因與退款失敗原因。
 
 ### 2026-07-06
 
-#### yushuan branch
+#### simon branch
 
-- `POST /api/markets/search` 新增市集活動列表查詢 API，支援依關鍵字、縣市、活動狀態、活動日期區間、分類名稱與活動類型篩選市集活動；回傳已發布且審核通過的市集活動列表，並包含活動狀態與分類資料。
-- `GET /api/markets/{id}` 新增市集活動詳細資料 API，依市集活動 ID 查詢單筆已發布且審核通過的活動詳情；回傳活動介紹、地點、日期時間、報名時間、攤位資訊、費用、封面圖、地圖圖、分類與活動狀態等資料。
+- `event_equipments` 新增 `charge_type` 與 `item_type`，用來區分活動設備為免費/付費，以及一般設備/用電項目；允許值分別為 `FREE`、`PAID` 與 `EQUIPMENT`、`POWER`。
+
+### 2026-07-04
+
+#### simon branch
+
+- `market_events` 狀態欄位改為單一 `workflow_status`，取代原本的 `review_status` 與 `publish_status`。
+- `workflow_status` 允許值為 `DRAFT`、`PENDING_REVIEW`、`MAP_BUILDING`、`READY_TO_PUBLISH`、`PUBLISHED`、`FINAL_REVIEW`、`UNPUBLISH_REQUESTED`、`UNPUBLISHED`、`CANCELLED`。
+- 新增 `brands_public_at`，品牌名單是否公開改由此時間欄位判斷，不再使用 `BRANDS_PUBLISHED` workflow 狀態。
+- `PUBLISHED` 表示活動已發布並進入報名、審核、付款、選位等公開後流程；報名截止後的最終名單確認改由 `FINAL_REVIEW` 表示，品牌公開則以 `brands_public_at <= now` 判斷。
+- 移除活動流程中的 `REVISION_REQUIRED`；需要補件時回到 `PENDING_REVIEW` 流程處理。
 
 ### 2026-07-02
 
 #### simon branch
 
-- `POST /api/stalls/select` 改為依 `applicationNo` 搭配多筆 `selections` 選位，每筆包含 `applyDate` 與 `stallNo`，且送出的日期必須完整對應該申請單的報名日期。
-- `GET /api/vendor/stall-map/{applicationNo}` 支援 `applyDate` 切換目前查看日期；未帶日期時預設該申請單第一個報名日，並回傳 `applyDates`、`applyDateCount`、`currentApplyDate` 與 `selectedStall`。
-- 新增公開 API `GET /api/eventsMap/{eventId}/stallsStatus` 至 `AllController`，不需 JWT；未帶 `applyDate` 時預設活動第一天，並回傳攤位尺寸、狀態、攤主名稱與目前日期等地圖欄位。
-- 移除攤主端舊的 `GET /api/events/{eventId}/stallsStatus` 使用方式，活動公開攤位狀態統一改由 `/api/eventsMap/{eventId}/stallsStatus` 查詢。
-- 主辦方地圖 API 支援依 `applyDate` 查看每日選位狀況；未帶日期時預設活動第一天。
-- 補齊攤位相關 Swagger 中文註解與 `ApiResponse` 中文錯誤訊息 mapping。
+- 選位資料由 `event_applications.selected_stall_id` 改為 `application_dates.selected_stall_id`，支援同一筆申請單在不同報名日期選擇不同攤位。
+- `application_dates.selected_stall_id` 新增對 `event_stalls.id` 的關聯，並以同日同攤位唯一限制避免同一天重複選位。
+- `event_stalls.status` 保留為攤位本體狀態，只表示攤位是否可用；每日是否被選走改由 `application_dates.selected_stall_id` 搭配 `apply_date` 判斷。
 
-### 2026-07-01
+### 2026-06-30
 
 #### simon branch
 
-- `GET /api/organizer/applications/{id}` 回傳補上租借設備資料 `equipmentRentals`，並讓費用區塊使用實際租借明細加總。
-- `GET /api/organizer/applications/{id}` 的 `status` 改為固定狀態流清單，包含報名、審核、取消、付款、退款申請、退款審核、已退款、選位、保證金退還；未到達的節點回傳 `value: null` 與 `createdAt: null`。
-- `GET /api/organizer/applications/{id}` 的 `fee` 補上 `stallFeeNote`、`rentalFee`、`rentalFeeNote`、`depositNote`，移除重複的 `items` 結構，方便前端直接顯示報名費用明細。
-- `ApiResponse.success(...)` 與 `ApiResponse.fail(...)` 訊息統一轉為中文；未列入 mapping 的英文成功訊息會 fallback 為 `操作成功`。
-- `POST /api/stalls/select` 的 `StallSelectionRequest` 移除 `applicationNo`、`stallNo` 的格式 pattern 限制，僅保留必填檢查。
-- `POST /api/stalls/select` 的錯誤訊息拆分為申請單狀態問題與攤位選位機制問題，方便測試時判斷是審核、付款、已選位、攤位不存在或攤位已被選走。
-
-- 新增 API 請求紀錄流程：`RequestLoggingFilter` 只記錄會異動資料的 API，並透過 `request_logs.status_code` 保存實際回傳結果。
-- 新增 `status_logs` 寫入流程，將狀態異動集中在 `StatusLogService` 規則表中處理，支援登入、登出、停用帳號、Email 驗證與選位狀態紀錄。
-- `GET /api/organizer/applications/{id}` 的 `status` 回傳改為包含 `value` 與 `createdAt`，時間優先來自 `status_logs` 關聯的 `request_logs.created_at`。
-- 自動登出排程會以 `SYSTEM / AUTO_LOGOUT_EXPIRED_USERS` 寫入 `request_logs`，並為被登出的使用者寫入 `users.isLogin = false` 的 `status_logs`。
-- 新增 `StatusLogServiceTest`，覆蓋目前所有 status log API 規則與自動產生的狀態紀錄內容。
+- `event_equipments` 新增 `wattage_limit`，用來記錄電力設備的瓦數上限。
+- 新增 `rental_appliances`，關聯 `equipment_rentals`，記錄 `equipment_rental_id`、`appliance_name`、`wattage`，用來保存租借電力時填寫的電器與瓦數。
+- `MarketDayDB.sql` 新增 `event_equipments`，記錄活動可租借設備、租金、計費方式、詳細資訊與庫存數量。
+- `MarketDayDB.sql` 新增 `equipment_rentals`，記錄報名租借設備，並保留租借當下的設備名稱、單價、計費方式、數量與小計。
+- `MarketDayDB.sql` 新增 `status_logs`，透過 `request_log_id` 關聯 API 請求並記錄狀態來源與更新後狀態。
 
 ### 2026-06-29
 
 #### simon branch
 
-- 選位 API 改為 `POST /api/stalls/select`，request body 只需 `applicationNo` 與 `stallNo`；後端會由 `applicationNo` 查出 `eventId`。
-- 選位流程改為先搶攤位狀態，再綁定申請單，避免多人同時選到同一攤位時出現競爭問題。
-- 選位 API 補上登入者必須為攤主，且申請單必須屬於目前登入攤主的檢查。
-- `GET /api/vendor/stall-map/{applicationNo}` 僅允許 `待選位` 或已成功選位的有效申請單查看地圖；已成功選位時回傳 `selectedStall` 供攤主確認。
-- `GET /api/vendor/stall-map/{applicationNo}` 的 `application` 回傳新增 `applicationStatus`。
-- 回傳 JSON 中 `address` 欄位統一組成 `city + district + address`。
-- `sql/test3.sql` 測資改為符合 request DTO：申請單號 `MD001` 到 `MD100`、攤位編號 `A01` 到 `A40`，資料量維持 20 攤主、2 主辦、10 活動、100 申請單。
-
-- `GET /api/organizer/applications/search` 目前會回傳登入中主辦方的全部申請資料，不接收 request body。
-- 保留 `GET /api/organizer/applications/{id}` 作為主辦方申請明細 API。
-- `LocalRegisterRequest.phone` 已改為選填；若有提供，仍需符合 `09xxxxxxxx` 格式。
-- `JwtAuthenticationFilter.protectedApis` 為目前需要 JWT 驗證的 API 清單來源。
-- `isCurrentLoginSession` 不再額外檢查 `status = 'ACTIVE'`；登入流程本身已限制未啟用帳號。
-- 錯誤訊息已透過 `ApiResponse.fail(...)` 統一轉為中文，例如 `Email already registered` 會回傳 `此 Email 已被註冊`。
-- `api-response.md` 已更新為目前 `ApiResponse<T>` 與 DTO 架構版本。
-- `swagger.md` 已同步目前 Swagger、DTO、JWT protected APIs 與中文錯誤訊息說明。
-- `market_events` 活動時間欄位改為 `start_at`、`end_at`、`registration_start_at`、`registration_end_at` 四個 `DATETIME2(0)` 欄位；主辦方申請與攤主選位地圖 API 已同步改用 `eventStartAt/eventEndAt`、`startAt/endAt`。
-- `users.status` 停用狀態改用 `DISABLED`；`POST /api/account/deactivate` 會將帳號狀態更新為 `DISABLED`。
-- `market_events.publish_status` 新增 `UNPUBLISH_REQUESTED`，並新增 `event_unpublish_requests` 支援下架申請流程。
-- 新增 `notifications.is_read/read_at` 支援通知中心未讀/已讀狀態。
-- 新增 `admin_operation_logs` 作為管理員後台操作紀錄表。
-
-### 2026-06-26
-
-- 移除攤主選位地圖回傳中的底圖資訊，不再回傳 `mapImageUrl`。
-- 移除專案對 `uploads` 靜態資源路徑的參考，包含 `app.upload-dir`、`app.upload-url-prefix` 與 `UploadResourceConfig`。
-- 將 DB、Google OAuth、Mail 等本機私密設定改為透過環境變數提供。
-- 改用 `run-local.cmd` 作為本機啟動入口，先設定環境變數，再啟動 Spring Boot。
-- 將 `run-local.cmd` 加入 `.gitignore`，避免本機私密資料被提交。
-- 將 `/api/organizer/applications/search` 調整為 GET 查詢，不接收 request body。
-- 將 `GET /api/organizer/applications/search` 加入 `JwtAuthenticationFilter.protectedApis`。
-- 新增 `GET /api/organizer/applications/{id}` 主辦方申請明細 API。
+- 調整 `market_events` 活動時間欄位：
+  - 移除 `start_date`、`end_date`、`start_time`、`end_time`。
+  - 改為 `start_at`、`end_at`、`registration_start_at`、`registration_end_at` 四個 `DATETIME2(0)` 欄位。
+  - 同步更新活動日期檢查、索引與欄位註解。
+- 調整 `users.status`：
+  - 允許值新增 `DISABLED`。
+  - 停用帳號使用 `DISABLED`，`IS_DELETED` 保留給刪除或封存語意。
+- 調整活動下架流程：
+  - `market_events` 活動流程狀態支援 `UNPUBLISH_REQUESTED`。
+  - 新增 `event_unpublish_requests` 記錄主辦方下架申請、下架原因、管理員審核結果與審核備註。
+- 調整通知中心資料：
+  - `notifications` 新增 `is_read`、`read_at`。
+  - 新增 `(user_id, is_read)` 索引，支援未讀通知查詢。
+- 新增管理員操作紀錄：
+  - 新增 `admin_operation_logs`，支援管理員後台操作紀錄列表。
+  - 欄位包含操作人、操作類型、操作對象、操作內容與操作時間。
+- 刪除原本用來補狀態的 alter SQL 對齊檔，後續以 `MarketDayDB.sql` 為主建表來源。
+- 後端同步注意：
+  - Repository 查詢活動時間時改用 `start_at`、`end_at`。
+  - 對外 API response 改用 `eventStartAt/eventEndAt` 或 `startAt/endAt`。
+  - 帳號停用 API 寫入 `users.status = DISABLED`。
 
 ### 2026-06-25
 
-- 新增主畫面相關 `MainScreenController`、`MainScreenService`、`MainScreenRepository` 與 `/api/main-screen` API。
-- 新增主辦方查詢申請列表與申請狀態顯示邏輯。
-- 調整 DB 狀態欄位與 `ApplicationStatusService` 顯示狀態。
+#### simon branch
 
-## 技術
+- 調整 `event_applications` 狀態欄位設計：
+  - `review_status` 保留報名審核流程，允許值為 `PENDING`、`APPROVED`、`REJECTED`。
+  - `payment_status` 改為付款流程狀態，允許值為 `PENDING`、`PAID`、`FAILED`、`EXPIRED`。
+  - `deposit_status` 改為保證金退還狀態，允許值為 `NOT_RETURNED`、`RETURNED`。
+  - 新增 `is_cancelled` 統一記錄報名是否取消，移除以 `review_status` 或 `payment_status` 表示取消的做法。
+  - 新增 `created_at` 記錄報名建立時間。
+- 調整退款狀態：
+  - `refunds.refund_status` 改為 `REFUND_REQUESTED`、`REFUNDING`、`REFUND_FAILED`、`REFUNDED`。
+  - 退款流程由 `refunds` 表管理，不再放在 `event_applications.review_status`。
+- 調整報名日期設計：
+  - 移除以 `event_sessions`、`application_sessions` 表示報名場次的設計。
+  - 改由 `application_dates.apply_date` 記錄攤主實際報名參加日期。
+- 後端同步注意：
+  - `ApplicationStatusService` 會依取消、退款、審核、付款、選位、活動結束與保證金狀態推導前端顯示的 `applicationStatus`。
+  - `保證金已退還` 需同時符合已付款、已選位、活動已結束且 `deposit_status = RETURNED`。
+  - Repository 若查詢 `event_applications`，取消狀態應以 `is_cancelled` 判斷，不應再檢查 `review_status/payment_status = CANCELLED`。
 
-- Java 21
-- Spring Boot 3.5.14
-- Spring Web
-- Spring Data JDBC
-- SQL Server
-- Bean Validation
-- JWT：jjwt 0.12.6
-- Swagger / OpenAPI：springdoc-openapi 2.8.17
-- Maven Wrapper
+## 主要檔案
 
-## 專案結構
+### `MarketDayDB.sql`
 
-```text
-demo/
-├─ pom.xml
-├─ mvnw / mvnw.cmd
-├─ run-local.cmd
-├─ README.md
-├─ api-response.md
-├─ swagger.md
-├─ src/main/java/com/example/demo
-│  ├─ Config/
-│  ├─ Controller/
-│  ├─ Filter/
-│  ├─ Repository/
-│  ├─ Service/
-│  ├─ dto/
-│  │  ├─ request/
-│  │  └─ response/
-│  └─ swagger/
-└─ src/main/resources/
-   ├─ application.properties
-   └─ static/
-```
+`MarketDayDB.sql` 是主要資料庫建置腳本，用來建立 `MarketDayDB` 所需的資料表、主鍵、外鍵、索引、預設值與欄位限制。
 
-## 設定
+目前包含的核心資料表例如：
 
-主要環境變數：
+- `users`：使用者登入帳號資料，包含 email、password_hash、provider（LOCAL/GOOGLE/BOTH）、google_sub、status、isLogin、expired_time、email_verified_at、created_at、updated_at；不保存 name/phone。
+- `categories`：活動與品牌共用分類，不再用 `type` 區分分類用途
+- `user_profiles`：攤主與主辦方共用基本資料，註冊時先建立 name；contact_name、contact_phone、contact_email、地址等資料可登入後補齊。
+- `vendor_profiles`：攤主品牌專屬資料，包含分類、社群連結、品牌資訊與商品摘要
+- `organizer_profiles`：主辦方專屬資料，包含公司名稱、統一編號與服務時間
+- `vendor_images`：品牌圖片，關聯 `vendor_profiles`，圖片類型包含 `AVATAR`、`COVER`、`GALLERY`
+- `vendor_products`：品牌商品，關聯 `vendor_profiles`
+- `market_events`：市集活動，包含活動時間、報名時間、活動流程狀態與活動建立時間
+- `event_unpublish_requests`：活動下架申請，記錄主辦方申請原因與管理員審核結果
+- `event_images`：活動圖片
+- `event_stall_zones`：活動攤位分區
+- `event_stalls`：活動攤位，可記錄攤位尺寸、編號與攤位本體狀態
+- `event_equipments`：活動可租借設備與用電項目，包含租金、計費方式、租借單位、庫存、單攤租借上限、租借狀態與瓦數上限
+- `event_applications`：攤主活動報名，包含保證金、報名審核備註與報名建立時間
+- `equipment_rentals`：報名租借設備，保存租借當下的設備名稱、單價、計費方式、單位、數量、計費單位數與小計
+- `application_dates`：報名參加日期，一筆報名可選擇活動中的多個日期，並在每個日期記錄選擇的攤位
+- `payments`：付款紀錄
+- `refunds`：退款紀錄，關聯報名與原付款紀錄
+- `notifications`：通知，包含未讀/已讀狀態
+- `admin_operation_logs`：管理員後台操作紀錄
+- `request_logs`：API request 紀錄
 
-| 變數 | 說明 |
-| --- | --- |
-| `DB_URL` | SQL Server JDBC URL。 |
-| `DB_USERNAME` | SQL Server 帳號。 |
-| `DB_PASSWORD` | SQL Server 密碼。 |
-| `GOOGLE_CLIENT_ID` | Google OAuth Client ID。 |
-| `MAIL_USERNAME` | Gmail 帳號。 |
-| `MAIL_PASSWORD` | Gmail App Password。 |
-| `JWT_SECRET` | JWT secret。 |
-| `JWT_EXPIRATION_MS` | JWT 有效時間，預設 1 小時。 |
-| `ADMIN_EMAIL` | 系統初始化管理員 Email。 |
-| `ADMIN_PASSWORD` | 系統初始化管理員密碼。 |
-| `ADMIN_NAME` | 系統初始化管理員名稱。 |
+建置新資料庫時，建議先執行此檔案。
 
-本機可透過 `run-local.cmd` 設定環境變數並啟動 Spring Boot。
+### `MarketDayDB_ERD.png`
 
-## 執行
+`MarketDayDB_ERD.png` 是 `MarketDayDB.sql` 對應的 ERD 圖，用來快速查看資料表之間的關聯。
 
-```powershell
-cd demo
-.\mvnw.cmd spring-boot:run
-```
+建議在閱讀或修改 SQL schema 前先查看 ERD，確認：
 
-測試：
+- 各資料表的主要責任
+- foreign key 關聯方向
+- 使用者、品牌、活動、攤位分區、活動攤位、報名、付款、退款之間的流程關係
+- 修改資料表時可能影響到的相依表
 
-```powershell
-cd demo
-.\mvnw.cmd test
-```
+## 輔助檔案
 
-## Swagger
+### `test.sql`
 
-Swagger UI：
+`test.sql` 放置測試資料，目前主要用於建立基本 `users` 測試帳號。
+
+建議在執行完 `MarketDayDB.sql` 建立資料表後，再執行 `test.sql`。
+
+### `categories.sql`
+
+`categories.sql` 放置前台分類篩選會使用的共用分類資料，包含：
 
 ```text
-http://localhost:8081/swagger-ui/marketDay/index.html
+餐飲美食、文創手作、親子家庭、寵物生活、植物選物、服飾配件、玩具選物
 ```
 
-OpenAPI JSON：
+建議在執行完 `MarketDayDB.sql` 建立資料表後，再執行 `categories.sql`。
+
+### `dropDB.sql`
+
+`dropDB.sql` 用於刪除或重建資料庫前的清理作業。
+
+執行前請確認目前資料庫中的資料可以被刪除，避免誤刪開發或測試資料。
+
+## 建議執行順序
+
+首次建立資料庫：
 
 ```text
-http://localhost:8081/v3/api-docs
+1. MarketDayDB.sql
+2. categories.sql
+3. test.sql
 ```
 
-詳細 Swagger / OpenAPI 文件請看：
+需要重新建立資料庫：
 
 ```text
-swagger.md
+1. dropDB.sql
+2. MarketDayDB.sql
+3. categories.sql
+4. test.sql
 ```
 
-## 統一 API Response
+## 與後端程式的關聯
 
-所有 Controller 目前直接回傳 `ApiResponse<T>`，成功時 `data` 會放入對應的 Response DTO：
+Spring Boot 專案目前透過 `application.properties` 連線到：
 
-```json
-{
-  "statusCode": 200,
-  "message": "Organizer account retrieved successfully",
-  "messageDetails": null,
-  "data": {}
-}
+```properties
+spring.datasource.url=jdbc:sqlserver://localhost:1433;databaseName=MarketDayDB;encrypt=true;trustServerCertificate=true
 ```
 
-錯誤訊息會透過 `ApiResponse.fail(...)` 統一轉成中文，讓前端可以直接用中文判斷錯誤。
+因此執行後端 API 前，需先確認：
 
-詳細格式請看：
+- SQL Server 已啟動
+- `MarketDayDB` 已建立
+- `MarketDayDB.sql` 已成功執行
+- `users` 等必要資料表存在
+- 若要測試登入流程，已透過 API 註冊帳號，或執行 `test.sql` 建立測試帳號
 
-```text
-api-response.md
-```
+## 修改 schema 的注意事項
 
-## JWT 與登入狀態
+修改 `MarketDayDB.sql` 時，請同步檢查：
 
-- 登入成功後會回傳 JWT。
-- JWT expiration 會與 DB `users.expired_time` 綁定。
-- 同帳號重新登入後，舊 token 會因 `expired_time` 不一致而失效。
-- `JwtAuthenticationFilter.protectedApis` 是需要 JWT 驗證 API 的清單來源。
-- `isCurrentLoginSession` 只檢查目前 token 是否仍是 DB 中有效登入 session，不再額外檢查 `status = 'ACTIVE'`。
+- `MarketDayDB_ERD.png` 是否需要更新
+- 後端 Java class 是否需要新增或調整欄位
+- API request / response 是否需要更新
+- Swagger schema 是否需要同步更新
+- `test.sql`、`test3.sql` 是否需要補測試資料或調整欄位名稱
 
-目前需要 JWT 驗證的 API：
+近期 schema 已調整 `users` 與帳號資料邊界：`users` 不再保存 `name`、`phone`，Google 身分使用 `google_sub` 與 `provider = GOOGLE/BOTH` 表示，使用者顯示名稱與聯絡資料改由 `user_profiles` 保存。若後端開始實作這些功能，需同步檢查相關 Entity / DTO / API 文件是否已包含 `expired_time`、`google_sub`、`user_profiles`、`vendor_profiles`、`organizer_profiles`、`vendor_profile_id`、`review_status`、`review_note`、`application_dates.selected_stall_id`、`deposit_amount`、`deposit_status`、`event_stalls`、`refunds`、`event_unpublish_requests` 與 `admin_operation_logs`。
 
-```text
-POST /api/auth/logout
-GET  /api/auth/me
-POST /api/users/me
-POST /api/account/deactivate
-GET  /api/vendor/account
-GET  /api/vendor/stall-map/{applicationNo}
-POST /api/stalls/select
-GET  /api/organizer/account
-GET  /api/organizer/applications/search
-GET  /api/organizer/applications/{id}
-GET  /api/organizer/stall-map/{eventId}
-GET  /api/organizer/stall-map/{eventId}/stalls/{stallNo}
-POST /api/organizer/applications/{id}/approve
-POST /api/organizer/applications/{id}/reject
-```
+若變更 `users` 欄位，請特別檢查：
 
-## API 清單
-
-### 使用者與驗證 API
-
-| Method | API | Request DTO | JWT | 說明 |
-| --- | --- | --- | --- | --- |
-| GET | `/usersall` | - | 否 | 查詢所有使用者。 |
-| POST | `/api/vendor/local-register` | `LocalRegisterRequest` | 否 | 攤主本地註冊。 |
-| POST | `/api/organizer/local-register` | `LocalRegisterRequest` | 否 | 主辦方本地註冊。 |
-| POST | `/api/vendor/google-register` | `GoogleCredentialRequest` | 否 | 攤主 Google 註冊。 |
-| POST | `/api/organizer/google-register` | `GoogleCredentialRequest` | 否 | 主辦方 Google 註冊。 |
-| POST | `/api/vendor/local-login` | `LocalLoginRequest` | 否 | 攤主本地登入。 |
-| POST | `/api/organizer/local-login` | `LocalLoginRequest` | 否 | 主辦方本地登入。 |
-| POST | `/api/admin/local-login` | `LocalLoginRequest` | 否 | 管理員本地登入。 |
-| POST | `/api/vendor/google-login` | `GoogleCredentialRequest` | 否 | 攤主 Google 登入。 |
-| POST | `/api/organizer/google-login` | `GoogleCredentialRequest` | 否 | 主辦方 Google 登入。 |
-| POST | `/api/auth/createAccount/emailVerify` | `EmailVerificationRequest` | 否 | 註冊 Email 驗證。 |
-| POST | `/api/auth/resetPassword/request` | `RequestPasswordResetRequest` | 否 | 申請重設密碼驗證碼。 |
-| POST | `/api/auth/resetPassword/emailVerify` | `EmailVerificationRequest` | 否 | 驗證重設密碼 Email 驗證碼，成功後回傳 reset token。 |
-| POST | `/api/auth/resetPassword/reset` | `ResetPasswordRequest` | 否 | 使用 reset token 重設密碼。 |
-| POST | `/api/auth/logout` | - | 是 | 登出。 |
-| GET | `/api/auth/me` | - | 是 | 取得目前登入使用者資料。 |
-| POST | `/api/users/me` | `UpdateUserProfileRequest` | 是 | 更新目前登入使用者資料。 |
-| POST | `/api/account/deactivate` | - | 是 | 停用目前登入帳號。 |
-
-### 攤主與攤位 API
-
-| Method | API | Request DTO | JWT | 說明 |
-| --- | --- | --- | --- | --- |
-| POST | `/api/stalls/select` | `StallSelectionRequest` | 是 | 依 `applicationNo` 與 `selections[]` 一次送出該申請單所有報名日期的選位。 |
-| GET | `/api/eventsMap/{eventId}/stallsStatus` | - | 否 | 公開查詢活動指定日期攤位狀態；未帶日期時預設活動第一天。 |
-| GET | `/api/vendor/account` | - | 是 | 取得目前登入攤主資料。 |
-| GET | `/api/vendor/stall-map/{applicationNo}` | - | 是 | 查詢攤主自己的申請單選位地圖，可用 `applyDate` 切換目前查看日期，並回傳報名日期數。 |
-
-### 主辦方 API
-
-| Method | API | Request | JWT | 說明 |
-| --- | --- | --- | --- | --- |
-| GET | `/api/organizer/account` | Authorization header | 是 | 取得目前登入主辦方資料。 |
-| GET | `/api/organizer/applications/search` | Authorization header | 是 | 查詢目前主辦方 published 活動的全部申請資料，依申請時間倒序。 |
-| GET | `/api/organizer/applications/{id}` | Authorization header | 是 | 查詢主辦方申請明細。 |
-| GET | `/api/organizer/stall-map/{eventId}` | Authorization header | 是 | 查詢主辦方活動指定日期的攤位選位狀況；未帶日期時預設活動第一天。 |
-| GET | `/api/organizer/stall-map/{eventId}/stalls/{stallNo}` | Authorization header | 是 | 查詢主辦方活動指定日期單一攤位的攤主與申請資訊。 |
-| POST | `/api/organizer/applications/{id}/approve` | Authorization header | 是 | 通過主辦方報名審核。 |
-| POST | `/api/organizer/applications/{id}/reject` | Authorization header | 是 | 退回主辦方報名審核，可填寫退件原因。 |
-
-## 文件維護規則
-
-- README 的更新紀錄請放在「更新日誌」底下，並以日期分區。
-- 新增或調整 API 時，同步更新 `README.md`、`api-response.md`、`swagger.md`。
-- 新增需要 JWT 驗證的 API 時，同步更新 `JwtAuthenticationFilter.protectedApis`。
-- 新增 request body 時，請建立或更新 `dto/request`。
-- 新增 response data 時，請建立或更新 `dto/response`。
-- 錯誤訊息請透過 `ApiResponse.fail(...)` 回傳，讓前端收到中文錯誤訊息。
-
-## Google 登入 / 註冊輔助測試頁面
-
-```text
-http://localhost:8081/test.html
-http://localhost:8081/test_2.html
-```
-
-## 2026-07-01 simon branch 補充更新
-
-- `POST /api/organizer/applications/{id}/approve` 與 `POST /api/organizer/applications/{id}/reject` 拆分主辦方報名審核 API；申請 `id` 改由 path params 傳入，通過不需 body，退件 body 可帶 `reviewNote`、`reviewNoteDetail`。
-- 退件原因在不變更 SQL 結構下以 JSON 字串存入 `event_applications.review_note`，格式為 `{"reviewNote":"...","reviewNoteDetail":"..."}`。
-- `GET /api/organizer/applications/{id}` 會解析 `event_applications.review_note`，回傳 `application.reviewNote` 與 `application.reviewNoteDetail`；若遇到舊純文字資料，會以 `reviewNote` 回傳並讓 `reviewNoteDetail` 為 `null`。
+- `users.java`
+- `UserController.java`
+- `AuthService.java`
+- `JwtService.java`
+- `demo/src/main/java/com/example/demo/swagger/*Request.java`
