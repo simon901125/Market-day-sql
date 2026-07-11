@@ -1,0 +1,26 @@
+package com.example.demo;
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.boot.context.event.ApplicationReadyEvent;
+import org.springframework.context.event.EventListener;
+import org.springframework.core.env.Environment;
+import org.springframework.scheduling.annotation.EnableScheduling;
+
+@SpringBootApplication
+@EnableScheduling
+public class DemoApplication {
+
+	public static void main(String[] args) {
+		SpringApplication.run(DemoApplication.class, args);
+	}
+
+	@EventListener(ApplicationReadyEvent.class)
+	public void printSwaggerUrl(ApplicationReadyEvent event) {
+		Environment env = event.getApplicationContext().getEnvironment();
+		String port = env.getProperty("server.port", "8080");
+		String swaggerPath = env.getProperty("springdoc.swagger-ui.path", "/swagger-ui/index.html");
+		System.out.println("Swagger UI: http://localhost:" + port + swaggerPath);
+	}
+
+}
