@@ -1,6 +1,8 @@
 USE master;
 GO
 
+/* Drops the whole MarketDayDB database, so new tables do not need
+   separate DROP TABLE entries here. */
 IF DB_ID(N'MarketDayDB') IS NOT NULL
 BEGIN
     SELECT
