@@ -1,7 +1,19 @@
-IF DB_ID(N'MarketDayDB') IS NULL
+USE master;
+GO
+
+/* =========================================================
+   Rebuild database
+   WARNING: Running this script deletes the existing database.
+   ========================================================= */
+
+IF DB_ID(N'MarketDayDB') IS NOT NULL
 BEGIN
-    CREATE DATABASE MarketDayDB;
+    ALTER DATABASE MarketDayDB SET SINGLE_USER WITH ROLLBACK IMMEDIATE;
+    DROP DATABASE MarketDayDB;
 END
+GO
+
+CREATE DATABASE MarketDayDB;
 GO
 
 USE MarketDayDB;
@@ -218,6 +230,36 @@ CREATE TABLE dbo.vendor_products
 );
 GO
 
+CREATE TABLE dbo.admin_profiles
+(
+    id BIGINT IDENTITY(1,1) NOT NULL,
+    user_id BIGINT NOT NULL,
+    admin_name NVARCHAR(100) NOT NULL,
+    CONSTRAINT PK_admin_profiles PRIMARY KEY (id),
+    CONSTRAINT UQ_admin_profiles_user UNIQUE (user_id),
+    CONSTRAINT FK_admin_profiles_users FOREIGN KEY (user_id) REFERENCES dbo.users(id)
+);
+GO
+
+CREATE TRIGGER dbo.trg_admin_profiles_validate_role
+ON dbo.admin_profiles
+AFTER INSERT, UPDATE
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    IF EXISTS (
+        SELECT 1
+        FROM inserted i
+        INNER JOIN dbo.users u ON u.id = i.user_id
+        WHERE u.role <> 'ADMIN'
+    )
+    BEGIN
+        THROW 50003, N'admin_profiles.user_id must reference an ADMIN user.', 1;
+    END
+END
+GO
+
 CREATE INDEX IX_vendor_products_vendor_status_featured
 ON dbo.vendor_products(vendor_profile_id, status, is_featured);
 GO
@@ -240,7 +282,12 @@ CREATE TABLE dbo.market_events
     registration_start_at DATETIME2(0) NOT NULL,
     registration_end_at DATETIME2(0) NOT NULL,
     max_booths INT NOT NULL,
+    stall_width DECIMAL(6,2) NULL,
+    stall_length DECIMAL(6,2) NULL,
     base_fee DECIMAL(10,2) NOT NULL,
+    traffic_info_driving NVARCHAR(MAX) NULL,
+    traffic_info_bus NVARCHAR(MAX) NULL,
+    traffic_info_metro NVARCHAR(MAX) NULL,
     cover_image_url NVARCHAR(500) NULL,
     map_image_url NVARCHAR(500) NULL,
     public_info_at DATETIME2(0) NULL,
@@ -288,20 +335,6 @@ CREATE INDEX IX_event_unpublish_requests_reviewed_by ON dbo.event_unpublish_requ
 CREATE INDEX IX_event_unpublish_requests_requested_at ON dbo.event_unpublish_requests(requested_at);
 GO
 
-CREATE TABLE dbo.event_traffic_infos
-(
-    id BIGINT IDENTITY(1,1) NOT NULL,
-    event_id BIGINT NOT NULL,
-    traffic_title NVARCHAR(100) NOT NULL,
-    traffic_details NVARCHAR(MAX) NOT NULL,
-    CONSTRAINT PK_event_traffic_infos PRIMARY KEY (id),
-    CONSTRAINT FK_event_traffic_infos_market_events FOREIGN KEY (event_id) REFERENCES dbo.market_events(id)
-);
-GO
-
-CREATE INDEX IX_event_traffic_infos_event ON dbo.event_traffic_infos(event_id);
-GO
-
 CREATE TABLE dbo.event_images
 (
     id BIGINT IDENTITY(1,1) NOT NULL,
@@ -333,9 +366,6 @@ CREATE TABLE dbo.event_stalls
     event_id BIGINT NOT NULL,
     zone_id BIGINT NOT NULL,
     stall_no NVARCHAR(30) NOT NULL,
-    width DECIMAL(6,2) NULL,
-    length DECIMAL(6,2) NULL,
-    height DECIMAL(6,2) NULL,
     status NVARCHAR(30) NOT NULL CONSTRAINT DF_event_stalls_status DEFAULT N'AVAILABLE',
     CONSTRAINT PK_event_stalls PRIMARY KEY (id),
     CONSTRAINT UQ_event_stalls_event_stall_no UNIQUE (event_id, stall_no),
@@ -766,6 +796,10 @@ EXEC dbo.usp_add_column_description N'organizer_profiles', N'service_days', N'�
 EXEC dbo.usp_add_column_description N'organizer_profiles', N'service_start_time', N'服務開始時間';
 EXEC dbo.usp_add_column_description N'organizer_profiles', N'service_end_time', N'服務結束時間';
 
+EXEC dbo.usp_add_column_description N'admin_profiles', N'id', N'管理員資料 ID';
+EXEC dbo.usp_add_column_description N'admin_profiles', N'user_id', N'管理員使用者 ID';
+EXEC dbo.usp_add_column_description N'admin_profiles', N'admin_name', N'管理員顯示名稱';
+
 EXEC dbo.usp_add_column_description N'vendor_images', N'id', N'照片 ID';
 EXEC dbo.usp_add_column_description N'vendor_images', N'vendor_profile_id', N'攤主品牌資料 ID';
 EXEC dbo.usp_add_column_description N'vendor_images', N'image_type', N'圖片類型';
@@ -797,7 +831,12 @@ EXEC dbo.usp_add_column_description N'market_events', N'end_at', N'活動結束�
 EXEC dbo.usp_add_column_description N'market_events', N'registration_start_at', N'報名開始時間';
 EXEC dbo.usp_add_column_description N'market_events', N'registration_end_at', N'報名截止時間';
 EXEC dbo.usp_add_column_description N'market_events', N'max_booths', N'攤位總數';
+EXEC dbo.usp_add_column_description N'market_events', N'stall_width', N'本活動固定攤位寬度';
+EXEC dbo.usp_add_column_description N'market_events', N'stall_length', N'本活動固定攤位長度';
 EXEC dbo.usp_add_column_description N'market_events', N'base_fee', N'基本攤位費';
+EXEC dbo.usp_add_column_description N'market_events', N'traffic_info_driving', N'開車交通資訊';
+EXEC dbo.usp_add_column_description N'market_events', N'traffic_info_bus', N'公車交通資訊';
+EXEC dbo.usp_add_column_description N'market_events', N'traffic_info_metro', N'捷運交通資訊';
 EXEC dbo.usp_add_column_description N'market_events', N'cover_image_url', N'活動封面';
 EXEC dbo.usp_add_column_description N'market_events', N'map_image_url', N'攤位地圖底圖';
 EXEC dbo.usp_add_column_description N'market_events', N'public_info_at', N'公開資訊時間';
@@ -816,11 +855,6 @@ EXEC dbo.usp_add_column_description N'event_unpublish_requests', N'review_note',
 EXEC dbo.usp_add_column_description N'event_unpublish_requests', N'requested_at', N'下架申請時間';
 EXEC dbo.usp_add_column_description N'event_unpublish_requests', N'reviewed_at', N'下架審核時間';
 
-EXEC dbo.usp_add_column_description N'event_traffic_infos', N'id', N'活動交通資訊 ID';
-EXEC dbo.usp_add_column_description N'event_traffic_infos', N'event_id', N'活動 ID';
-EXEC dbo.usp_add_column_description N'event_traffic_infos', N'traffic_title', N'交通方式標題';
-EXEC dbo.usp_add_column_description N'event_traffic_infos', N'traffic_details', N'交通方式詳細資訊';
-
 EXEC dbo.usp_add_column_description N'event_images', N'id', N'圖片 ID';
 EXEC dbo.usp_add_column_description N'event_images', N'event_id', N'活動 ID';
 EXEC dbo.usp_add_column_description N'event_images', N'image_url', N'圖片路徑';
@@ -834,9 +868,6 @@ EXEC dbo.usp_add_column_description N'event_stalls', N'id', N'攤位 ID';
 EXEC dbo.usp_add_column_description N'event_stalls', N'event_id', N'活動 ID';
 EXEC dbo.usp_add_column_description N'event_stalls', N'zone_id', N'分區 ID';
 EXEC dbo.usp_add_column_description N'event_stalls', N'stall_no', N'攤位編號';
-EXEC dbo.usp_add_column_description N'event_stalls', N'width', N'攤位寬度';
-EXEC dbo.usp_add_column_description N'event_stalls', N'length', N'攤位長度';
-EXEC dbo.usp_add_column_description N'event_stalls', N'height', N'攤位高度';
 EXEC dbo.usp_add_column_description N'event_stalls', N'status', N'攤位狀態（AVAILABLE/SELECTED/ASSIGNED/DISABLED）';
 
 EXEC dbo.usp_add_column_description N'event_equipments', N'id', N'活動設備 ID';
@@ -983,4 +1014,65 @@ BEGIN
         SYSDATETIME()
     );
 END
+GO
+
+IF NOT EXISTS (
+    SELECT 1
+    FROM dbo.admin_profiles ap
+    INNER JOIN dbo.users u ON u.id = ap.user_id
+    WHERE u.email = 'admin@marketday.local'
+)
+BEGIN
+    INSERT INTO dbo.admin_profiles (user_id, admin_name)
+    SELECT id, N'系統管理員'
+    FROM dbo.users
+    WHERE email = 'admin@marketday.local';
+END
+GO
+
+/* =========================================================
+   Default category seed data
+   ========================================================= */
+
+INSERT INTO dbo.categories (name, slug, is_active)
+SELECT N'餐飲美食', N'food', 1
+WHERE NOT EXISTS (
+    SELECT 1 FROM dbo.categories WHERE slug = N'food'
+);
+
+INSERT INTO dbo.categories (name, slug, is_active)
+SELECT N'文創手作', N'handmade', 1
+WHERE NOT EXISTS (
+    SELECT 1 FROM dbo.categories WHERE slug = N'handmade'
+);
+
+INSERT INTO dbo.categories (name, slug, is_active)
+SELECT N'親子家庭', N'family', 1
+WHERE NOT EXISTS (
+    SELECT 1 FROM dbo.categories WHERE slug = N'family'
+);
+
+INSERT INTO dbo.categories (name, slug, is_active)
+SELECT N'寵物生活', N'pet-life', 1
+WHERE NOT EXISTS (
+    SELECT 1 FROM dbo.categories WHERE slug = N'pet-life'
+);
+
+INSERT INTO dbo.categories (name, slug, is_active)
+SELECT N'植物選物', N'plants', 1
+WHERE NOT EXISTS (
+    SELECT 1 FROM dbo.categories WHERE slug = N'plants'
+);
+
+INSERT INTO dbo.categories (name, slug, is_active)
+SELECT N'服飾配件', N'fashion-accessories', 1
+WHERE NOT EXISTS (
+    SELECT 1 FROM dbo.categories WHERE slug = N'fashion-accessories'
+);
+
+INSERT INTO dbo.categories (name, slug, is_active)
+SELECT N'玩具選物', N'toys', 1
+WHERE NOT EXISTS (
+    SELECT 1 FROM dbo.categories WHERE slug = N'toys'
+);
 GO

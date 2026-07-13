@@ -6,6 +6,18 @@
 
 > 更新日誌請依日期與 branch 分區：日期使用 `###`，branch 使用 `####`，越近的更新放越上面，避免不同分支的更動混在同一段。
 
+### 2026-07-13
+
+#### simon branch
+
+- `MarketDayDB.sql` 改為完整重建腳本：執行時會先將既有 `MarketDayDB` 切換成單一使用者模式、回滾連線並刪除資料庫，再重新建立資料庫；執行前必須確認既有資料可刪除。
+- `event_stalls` 移除 `width`、`length`、`height`；攤位高度不再保存，活動共用的攤位寬度與長度改由 `market_events.stall_width`、`market_events.stall_length` 保存。
+- 移除 `event_traffic_infos`；固定三種交通資訊直接保存於 `market_events.traffic_info_driving`、`traffic_info_bus`、`traffic_info_metro`。
+- 新增 `admin_profiles`，以唯一的 `user_id` 關聯 `users`，並用 `admin_name` 保存管理員顯示名稱；新增 trigger，限制該表只能關聯 `role = ADMIN` 的帳號。
+- 預設管理員建立完成後，同步新增 `admin_profiles` 資料，預設顯示名稱為「系統管理員」。
+- 將 `categories.sql` 的七筆預設分類整合至 `MarketDayDB.sql`，資料庫建置完成後會與預設管理員一起建立，不需再額外執行分類 seed 檔案。
+- `admin_operation_logs.admin_user_id` 維持關聯 `users.id`，管理員名稱需要顯示時再透過 `users` 關聯 `admin_profiles` 取得，操作紀錄表本身不重複保存名稱。
+
 ### 2026-07-11
 
 #### simon branch
@@ -139,7 +151,7 @@
 
 ### `MarketDayDB.sql`
 
-`MarketDayDB.sql` 是主要資料庫建置腳本，用來建立 `MarketDayDB` 所需的資料表、主鍵、外鍵、索引、預設值與欄位限制。
+`MarketDayDB.sql` 是主要資料庫完整重建腳本，用來刪除既有 `MarketDayDB`，再建立資料庫所需的資料表、主鍵、外鍵、索引、預設值、欄位限制與預設資料。執行此檔案會刪除既有資料，請勿直接用於需要保留資料的環境。
 
 目前包含的核心資料表例如：
 
@@ -150,12 +162,12 @@
 - `organizer_profiles`：主辦方專屬資料，包含主辦方名稱、公司名稱、統一編號與服務時間
 - `vendor_images`：品牌圖片，關聯 `vendor_profiles`，圖片類型包含 `AVATAR`、`COVER`、`GALLERY`
 - `vendor_products`：品牌商品，關聯 `vendor_profiles`，可用 `is_featured` 標記特色商品
-- `market_events`：市集活動，包含活動時間、報名時間、活動流程狀態與活動建立時間
-- `event_traffic_infos`：活動交通資訊，關聯 `market_events`，一個活動可保存多筆交通方式與詳細資訊
+- `admin_profiles`：管理員資料，關聯 `users`，保存管理員顯示名稱
+- `market_events`：市集活動，包含活動時間、報名時間、活動共用攤位寬度與長度、固定三種交通資訊、活動流程狀態與活動建立時間
 - `event_unpublish_requests`：活動下架申請，記錄主辦方申請原因與管理員審核結果
 - `event_images`：活動圖片
 - `event_stall_zones`：活動攤位分區
-- `event_stalls`：活動攤位，可記錄攤位尺寸、編號與攤位本體狀態
+- `event_stalls`：活動攤位，保存所屬活動、分區、攤位編號與攤位本體狀態；攤位尺寸統一由 `market_events` 保存
 - `event_equipments`：活動可租借設備與用電項目，包含租金、計費方式、租借單位、庫存、單攤租借上限、租借狀態與瓦數上限
 - `event_applications`：攤主活動報名，包含保證金、報名審核狀態與報名建立時間
 - `application_review_notes`：報名審核退件原因，關聯 `event_applications`，保存退件原因與詳細說明
@@ -167,7 +179,7 @@
 - `admin_operation_logs`：管理員後台操作紀錄
 - `request_logs`：API request 紀錄
 
-建置新資料庫時，建議先執行此檔案。
+建置或重建資料庫時只需執行此檔案；腳本會自動建立預設管理員、管理員 profile 與分類資料。
 
 ### `MarketDayDB_ERD.png`
 
@@ -224,13 +236,13 @@
 餐飲美食、文創手作、親子家庭、寵物生活、植物選物、服飾配件、玩具選物
 ```
 
-建議在執行完 `MarketDayDB.sql` 建立資料表後，再執行 `categories.sql`。
+相同的預設分類已整合進 `MarketDayDB.sql`。此檔案可保留作為獨立補資料或參考用途，正常重建資料庫時不需再執行。
 
 ### `dropDB.sql`
 
 `dropDB.sql` 用於刪除或重建資料庫前的清理作業。
 
-執行前請確認目前資料庫中的資料可以被刪除，避免誤刪開發或測試資料。
+刪除資料庫的流程已整合進 `MarketDayDB.sql`。此檔案可用於只想刪除資料庫而不立即重建的情境；執行前請確認目前資料可以被刪除。
 
 ## 建議執行順序
 
@@ -238,20 +250,19 @@
 
 ```text
 1. MarketDayDB.sql
-2. categories.sql
-3. test.sql
-4. 視測試需求執行 test10.sql 或 test11.sql
+2. 視需要執行 test.sql
+3. 視測試需求執行 test10.sql 或 test11.sql
 ```
 
 需要重新建立資料庫：
 
 ```text
-1. dropDB.sql
-2. MarketDayDB.sql
-3. categories.sql
-4. test.sql
-5. 視測試需求執行 test10.sql 或 test11.sql
+1. MarketDayDB.sql
+2. 視需要執行 test.sql
+3. 視測試需求執行 test10.sql 或 test11.sql
 ```
+
+> `MarketDayDB.sql` 無論資料庫是否已存在，都會先刪除再重建；首次建置與重新建置使用相同步驟。
 
 ## 與後端程式的關聯
 
@@ -279,7 +290,7 @@ spring.datasource.url=jdbc:sqlserver://localhost:1433;databaseName=MarketDayDB;e
 - Swagger schema 是否需要同步更新
 - `test.sql`、`test3.sql`、`test10.sql`、`test11.sql` 是否需要補測試資料或調整欄位名稱
 
-近期 schema 已調整 `users` 與帳號資料邊界：`users` 不再保存 `name`、`phone`，Google 身分使用 `google_sub` 與 `provider = GOOGLE/BOTH` 表示，使用者顯示名稱改由 `vendor_profiles.brand_name` 或 `organizer_profiles.organizer_name` 保存，聯絡資料改由 `user_profiles` 保存。若後端開始實作這些功能，需同步檢查相關 Entity / DTO / API 文件是否已包含 `expired_time`、`google_sub`、`user_profiles`、`vendor_profiles`、`organizer_profiles`、`vendor_profile_id`、`review_status`、`application_review_notes`、`application_dates.selected_stall_id`、`deposit_amount`、`deposit_status`、`event_stalls`、`event_traffic_infos`、`refunds`、`event_unpublish_requests` 與 `admin_operation_logs`。
+近期 schema 已調整 `users` 與帳號資料邊界：`users` 不再保存 `name`、`phone`，Google 身分使用 `google_sub` 與 `provider = GOOGLE/BOTH` 表示，攤主、主辦方與管理員顯示名稱分別由 `vendor_profiles.brand_name`、`organizer_profiles.organizer_name`、`admin_profiles.admin_name` 保存，聯絡資料改由 `user_profiles` 保存。若後端開始實作這些功能，需同步檢查相關 Entity / DTO / API 文件是否已包含 `expired_time`、`google_sub`、`user_profiles`、`vendor_profiles`、`organizer_profiles`、`admin_profiles`、`vendor_profile_id`、`review_status`、`application_review_notes`、`application_dates.selected_stall_id`、`deposit_amount`、`deposit_status`、`event_stalls`、`market_events.stall_width`、`market_events.stall_length`、三種 `traffic_info_*` 欄位、`refunds`、`event_unpublish_requests` 與 `admin_operation_logs`。
 
 若變更 `users` 欄位，請特別檢查：
 
