@@ -29,12 +29,9 @@ BEGIN TRY
     DELETE FROM dbo.event_stalls;
     DELETE FROM dbo.event_equipments;
     DELETE FROM dbo.event_stall_zones;
-    DELETE FROM dbo.event_images;
-    DELETE FROM dbo.event_traffic_infos;
     DELETE FROM dbo.event_unpublish_requests;
     DELETE FROM dbo.market_events;
     DELETE FROM dbo.vendor_products;
-    DELETE FROM dbo.vendor_images;
     DELETE FROM dbo.organizer_profiles;
     DELETE FROM dbo.vendor_profiles;
     DELETE FROM dbo.user_profiles;
@@ -57,12 +54,9 @@ BEGIN TRY
     DBCC CHECKIDENT ('dbo.event_stalls', RESEED, 0) WITH NO_INFOMSGS;
     DBCC CHECKIDENT ('dbo.event_equipments', RESEED, 0) WITH NO_INFOMSGS;
     DBCC CHECKIDENT ('dbo.event_stall_zones', RESEED, 0) WITH NO_INFOMSGS;
-    DBCC CHECKIDENT ('dbo.event_images', RESEED, 0) WITH NO_INFOMSGS;
-    DBCC CHECKIDENT ('dbo.event_traffic_infos', RESEED, 0) WITH NO_INFOMSGS;
     DBCC CHECKIDENT ('dbo.event_unpublish_requests', RESEED, 0) WITH NO_INFOMSGS;
     DBCC CHECKIDENT ('dbo.market_events', RESEED, 0) WITH NO_INFOMSGS;
     DBCC CHECKIDENT ('dbo.vendor_products', RESEED, 0) WITH NO_INFOMSGS;
-    DBCC CHECKIDENT ('dbo.vendor_images', RESEED, 0) WITH NO_INFOMSGS;
     DBCC CHECKIDENT ('dbo.organizer_profiles', RESEED, 0) WITH NO_INFOMSGS;
     DBCC CHECKIDENT ('dbo.vendor_profiles', RESEED, 0) WITH NO_INFOMSGS;
     DBCC CHECKIDENT ('dbo.user_profiles', RESEED, 0) WITH NO_INFOMSGS;
@@ -79,7 +73,6 @@ BEGIN TRY
         (SELECT COUNT(*) FROM dbo.users) AS users,
         (SELECT COUNT(*) FROM dbo.categories) AS categories,
         (SELECT COUNT(*) FROM dbo.market_events) AS marketEvents,
-        (SELECT COUNT(*) FROM dbo.event_traffic_infos) AS eventTrafficInfos,
         (SELECT COUNT(*) FROM dbo.event_applications) AS eventApplications,
         (SELECT COUNT(*) FROM dbo.application_review_notes) AS applicationReviewNotes,
         (SELECT COUNT(*) FROM dbo.payments) AS payments,

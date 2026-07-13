@@ -127,6 +127,8 @@ CREATE TABLE dbo.vendor_profiles
     user_profile_id BIGINT NOT NULL,
     category_id BIGINT NOT NULL,
     brand_name NVARCHAR(150) NULL,
+    avatar_image_url NVARCHAR(500) NULL,
+    cover_image_url NVARCHAR(500) NULL,
     instagram_url NVARCHAR(500) NULL,
     facebook_url NVARCHAR(500) NULL,
     website_url NVARCHAR(500) NULL,
@@ -194,23 +196,6 @@ BEGIN
         THROW 50002, N'organizer_profiles.user_profile_id must reference an ORGANIZER profile.', 1;
     END
 END
-GO
-
-CREATE TABLE dbo.vendor_images
-(
-    id BIGINT IDENTITY(1,1) NOT NULL,
-    vendor_profile_id BIGINT NOT NULL,
-    image_type NVARCHAR(30) NOT NULL,
-    image_url NVARCHAR(500) NOT NULL,
-    CONSTRAINT PK_vendor_images PRIMARY KEY (id),
-    CONSTRAINT FK_vendor_images_vendor_profiles FOREIGN KEY (vendor_profile_id) REFERENCES dbo.vendor_profiles(id),
-    CONSTRAINT CK_vendor_images_image_type CHECK (image_type IN (N'AVATAR', N'COVER', N'GALLERY'))
-);
-GO
-
-CREATE INDEX IX_vendor_images_vendor_profile_type ON dbo.vendor_images(vendor_profile_id, image_type);
-CREATE UNIQUE INDEX UQ_vendor_images_avatar ON dbo.vendor_images(vendor_profile_id) WHERE image_type = N'AVATAR';
-CREATE UNIQUE INDEX UQ_vendor_images_cover ON dbo.vendor_images(vendor_profile_id) WHERE image_type = N'COVER';
 GO
 
 CREATE TABLE dbo.vendor_products
@@ -333,16 +318,6 @@ CREATE INDEX IX_event_unpublish_requests_event_status ON dbo.event_unpublish_req
 CREATE INDEX IX_event_unpublish_requests_requested_by ON dbo.event_unpublish_requests(requested_by);
 CREATE INDEX IX_event_unpublish_requests_reviewed_by ON dbo.event_unpublish_requests(reviewed_by);
 CREATE INDEX IX_event_unpublish_requests_requested_at ON dbo.event_unpublish_requests(requested_at);
-GO
-
-CREATE TABLE dbo.event_images
-(
-    id BIGINT IDENTITY(1,1) NOT NULL,
-    event_id BIGINT NOT NULL,
-    image_url NVARCHAR(500) NOT NULL,
-    CONSTRAINT PK_event_images PRIMARY KEY (id),
-    CONSTRAINT FK_event_images_market_events FOREIGN KEY (event_id) REFERENCES dbo.market_events(id)
-);
 GO
 
 CREATE TABLE dbo.event_stall_zones
@@ -781,6 +756,8 @@ EXEC dbo.usp_add_column_description N'vendor_profiles', N'id', N'攤主品牌資
 EXEC dbo.usp_add_column_description N'vendor_profiles', N'user_profile_id', N'共用個人資料 ID';
 EXEC dbo.usp_add_column_description N'vendor_profiles', N'category_id', N'品牌分類 ID';
 EXEC dbo.usp_add_column_description N'vendor_profiles', N'brand_name', N'品牌名稱';
+EXEC dbo.usp_add_column_description N'vendor_profiles', N'avatar_image_url', N'攤主頭像圖片路徑';
+EXEC dbo.usp_add_column_description N'vendor_profiles', N'cover_image_url', N'攤主封面圖片路徑';
 EXEC dbo.usp_add_column_description N'vendor_profiles', N'instagram_url', N'Instagram';
 EXEC dbo.usp_add_column_description N'vendor_profiles', N'facebook_url', N'Facebook';
 EXEC dbo.usp_add_column_description N'vendor_profiles', N'website_url', N'官方網站';
@@ -799,11 +776,6 @@ EXEC dbo.usp_add_column_description N'organizer_profiles', N'service_end_time', 
 EXEC dbo.usp_add_column_description N'admin_profiles', N'id', N'管理員資料 ID';
 EXEC dbo.usp_add_column_description N'admin_profiles', N'user_id', N'管理員使用者 ID';
 EXEC dbo.usp_add_column_description N'admin_profiles', N'admin_name', N'管理員顯示名稱';
-
-EXEC dbo.usp_add_column_description N'vendor_images', N'id', N'照片 ID';
-EXEC dbo.usp_add_column_description N'vendor_images', N'vendor_profile_id', N'攤主品牌資料 ID';
-EXEC dbo.usp_add_column_description N'vendor_images', N'image_type', N'圖片類型';
-EXEC dbo.usp_add_column_description N'vendor_images', N'image_url', N'圖片路徑';
 
 EXEC dbo.usp_add_column_description N'vendor_products', N'id', N'商品 ID';
 EXEC dbo.usp_add_column_description N'vendor_products', N'vendor_profile_id', N'攤主品牌資料 ID';
@@ -854,10 +826,6 @@ EXEC dbo.usp_add_column_description N'event_unpublish_requests', N'status', N'�
 EXEC dbo.usp_add_column_description N'event_unpublish_requests', N'review_note', N'管理員審核備註';
 EXEC dbo.usp_add_column_description N'event_unpublish_requests', N'requested_at', N'下架申請時間';
 EXEC dbo.usp_add_column_description N'event_unpublish_requests', N'reviewed_at', N'下架審核時間';
-
-EXEC dbo.usp_add_column_description N'event_images', N'id', N'圖片 ID';
-EXEC dbo.usp_add_column_description N'event_images', N'event_id', N'活動 ID';
-EXEC dbo.usp_add_column_description N'event_images', N'image_url', N'圖片路徑';
 
 EXEC dbo.usp_add_column_description N'event_stall_zones', N'id', N'分區 ID';
 EXEC dbo.usp_add_column_description N'event_stall_zones', N'event_id', N'活動 ID';

@@ -17,6 +17,8 @@
 - 預設管理員建立完成後，同步新增 `admin_profiles` 資料，預設顯示名稱為「系統管理員」。
 - 將 `categories.sql` 的七筆預設分類整合至 `MarketDayDB.sql`，資料庫建置完成後會與預設管理員一起建立，不需再額外執行分類 seed 檔案。
 - `admin_operation_logs.admin_user_id` 維持關聯 `users.id`，管理員名稱需要顯示時再透過 `users` 關聯 `admin_profiles` 取得，操作紀錄表本身不重複保存名稱。
+- 圖片改為依單張關係直接保存於所屬資料表：`vendor_profiles` 新增 `avatar_image_url`、`cover_image_url`；商品圖片維持 `vendor_products.image_url`，活動封面與攤位地圖維持 `market_events.cover_image_url`、`map_image_url`。
+- 移除 `vendor_images` 與 `event_images`；目前不提供攤主或活動多圖片圖庫，五種圖片皆限制為每筆所屬資料最多一張。
 
 ### 2026-07-11
 
@@ -158,14 +160,12 @@
 - `users`：使用者登入帳號資料，包含 email、password_hash、provider（LOCAL/GOOGLE/BOTH）、google_sub、status、isLogin、expired_time、email_verified_at、created_at、updated_at；不保存 name/phone。
 - `categories`：活動與品牌共用分類，不再用 `type` 區分分類用途
 - `user_profiles`：攤主與主辦方共用聯絡資料，包含 contact_name、contact_phone、contact_email、地址等資料。
-- `vendor_profiles`：攤主品牌專屬資料，包含品牌名稱、分類、社群連結、品牌簡述與品牌介紹
+- `vendor_profiles`：攤主品牌專屬資料，包含品牌名稱、分類、頭像、封面、社群連結、品牌簡述與品牌介紹
 - `organizer_profiles`：主辦方專屬資料，包含主辦方名稱、公司名稱、統一編號與服務時間
-- `vendor_images`：品牌圖片，關聯 `vendor_profiles`，圖片類型包含 `AVATAR`、`COVER`、`GALLERY`
 - `vendor_products`：品牌商品，關聯 `vendor_profiles`，可用 `is_featured` 標記特色商品
 - `admin_profiles`：管理員資料，關聯 `users`，保存管理員顯示名稱
 - `market_events`：市集活動，包含活動時間、報名時間、活動共用攤位寬度與長度、固定三種交通資訊、活動流程狀態與活動建立時間
 - `event_unpublish_requests`：活動下架申請，記錄主辦方申請原因與管理員審核結果
-- `event_images`：活動圖片
 - `event_stall_zones`：活動攤位分區
 - `event_stalls`：活動攤位，保存所屬活動、分區、攤位編號與攤位本體狀態；攤位尺寸統一由 `market_events` 保存
 - `event_equipments`：活動可租借設備與用電項目，包含租金、計費方式、租借單位、庫存、單攤租借上限、租借狀態與瓦數上限
