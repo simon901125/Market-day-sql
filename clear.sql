@@ -34,6 +34,7 @@ BEGIN TRY
     DELETE FROM dbo.vendor_products;
     DELETE FROM dbo.organizer_profiles;
     DELETE FROM dbo.vendor_profiles;
+    DELETE FROM dbo.admin_profiles;
     DELETE FROM dbo.user_profiles;
     DELETE FROM dbo.user_tokens;
     DELETE FROM dbo.notifications;
@@ -59,6 +60,7 @@ BEGIN TRY
     DBCC CHECKIDENT ('dbo.vendor_products', RESEED, 0) WITH NO_INFOMSGS;
     DBCC CHECKIDENT ('dbo.organizer_profiles', RESEED, 0) WITH NO_INFOMSGS;
     DBCC CHECKIDENT ('dbo.vendor_profiles', RESEED, 0) WITH NO_INFOMSGS;
+    DBCC CHECKIDENT ('dbo.admin_profiles', RESEED, 0) WITH NO_INFOMSGS;
     DBCC CHECKIDENT ('dbo.user_profiles', RESEED, 0) WITH NO_INFOMSGS;
     DBCC CHECKIDENT ('dbo.user_tokens', RESEED, 0) WITH NO_INFOMSGS;
     DBCC CHECKIDENT ('dbo.notifications', RESEED, 0) WITH NO_INFOMSGS;
@@ -71,6 +73,7 @@ BEGIN TRY
 
     SELECT
         (SELECT COUNT(*) FROM dbo.users) AS users,
+        (SELECT COUNT(*) FROM dbo.admin_profiles) AS adminProfiles,
         (SELECT COUNT(*) FROM dbo.categories) AS categories,
         (SELECT COUNT(*) FROM dbo.market_events) AS marketEvents,
         (SELECT COUNT(*) FROM dbo.event_applications) AS eventApplications,

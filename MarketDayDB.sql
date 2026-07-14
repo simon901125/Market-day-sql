@@ -207,11 +207,8 @@ CREATE TABLE dbo.vendor_products
     description NVARCHAR(MAX) NULL,
     price DECIMAL(10,2) NULL,
     image_url NVARCHAR(500) NULL,
-    is_featured BIT NOT NULL CONSTRAINT DF_vendor_products_is_featured DEFAULT 0,
-    status NVARCHAR(30) NOT NULL,
     CONSTRAINT PK_vendor_products PRIMARY KEY (id),
-    CONSTRAINT FK_vendor_products_vendor_profiles FOREIGN KEY (vendor_profile_id) REFERENCES dbo.vendor_profiles(id),
-    CONSTRAINT CK_vendor_products_status CHECK (status IN (N'ACTIVE', N'HIDDEN'))
+    CONSTRAINT FK_vendor_products_vendor_profiles FOREIGN KEY (vendor_profile_id) REFERENCES dbo.vendor_profiles(id)
 );
 GO
 
@@ -245,8 +242,8 @@ BEGIN
 END
 GO
 
-CREATE INDEX IX_vendor_products_vendor_status_featured
-ON dbo.vendor_products(vendor_profile_id, status, is_featured);
+CREATE INDEX IX_vendor_products_vendor
+ON dbo.vendor_products(vendor_profile_id);
 GO
 
 CREATE TABLE dbo.market_events
@@ -784,8 +781,6 @@ EXEC dbo.usp_add_column_description N'vendor_products', N'short_description', N'
 EXEC dbo.usp_add_column_description N'vendor_products', N'description', N'商品介紹';
 EXEC dbo.usp_add_column_description N'vendor_products', N'price', N'商品價格';
 EXEC dbo.usp_add_column_description N'vendor_products', N'image_url', N'商品圖片';
-EXEC dbo.usp_add_column_description N'vendor_products', N'is_featured', N'是否為特色商品';
-EXEC dbo.usp_add_column_description N'vendor_products', N'status', N'商品狀態';
 
 EXEC dbo.usp_add_column_description N'market_events', N'id', N'活動 ID';
 EXEC dbo.usp_add_column_description N'market_events', N'user_id', N'主辦方 ID';

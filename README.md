@@ -6,6 +6,16 @@
 
 > 更新日誌請依日期與 branch 分區：日期使用 `###`，branch 使用 `####`，越近的更新放越上面，避免不同分支的更動混在同一段。
 
+### 2026-07-14
+
+#### simon branch
+
+- 簡化 `vendor_products`：移除 `is_featured` 與 `status`，商品不再區分特色商品或顯示狀態；資料表保留商品基本資料、價格與單張圖片路徑。
+- `vendor_products` 查詢索引調整為 `IX_vendor_products_vendor(vendor_profile_id)`，供品牌與攤主資料依品牌 ID 取得商品。
+- 攤主儲存完整商品清單時，既有商品依原 ID 更新、新商品才新增，未包含於前端清單的既有商品直接刪除，避免每次儲存都刪除重建而使商品 ID 持續增加。
+- `/api/brands/search` 與 `/api/brands/{id}` 同步取消 `is_featured`、`status` 篩選；品牌搜尋回傳該品牌全部商品名稱，品牌詳情回傳全部商品詳細資料，並依商品 ID 排序。
+- `clear.sql` 補上 `admin_profiles` 的資料刪除與 identity reseed，避免清空 `users` 時與 `FK_admin_profiles_users` 外鍵衝突。
+
 ### 2026-07-13
 
 #### simon branch
@@ -24,8 +34,6 @@
 
 #### simon branch
 
-- 新增 `test10.sql`，提供公開品牌 API 測試資料：50 筆品牌、每品牌 10 筆商品、10 筆測試活動，每個品牌皆參與所有測試活動，活動時間包含已結束、進行中與未開始。
-- 新增 `test11.sql`，提供主辦方 profile API 測試資料：建立 1 筆主辦方帳號、共用聯絡/地址資料與主辦方公司/服務時間資料；測試帳號為 `organizer1@example.test`，密碼為 `a12345678`。
 - `market_events` 移除 `traffic_info`，交通資訊改由 `event_traffic_infos` 保存。
 - 新增 `event_traffic_infos`，以 `event_id` 關聯活動，並用 `traffic_title`、`traffic_details` 保存多筆交通方式與詳細資訊。
 - `event_applications` 移除 `review_note`，報名退件原因改由 `application_review_notes` 保存。
@@ -33,8 +41,8 @@
 - `vendor_profiles` 新增 `brand_summary` 保存品牌簡述，原 `brand_description` 語意調整為品牌介紹。
 - `vendor_profiles` 新增 `brand_name` 保存品牌名稱；品牌名稱不再使用 `user_profiles.name`。
 - `vendor_profiles` 移除 `brand_type`，品牌類型統一由 `category_id` 關聯 `categories` 取得。
-- `vendor_profiles` 移除 `product_summary`，品牌特色商品改由 `vendor_products` 保存詳細資料。
-- `vendor_products` 新增 `is_featured`，用來標記特色商品；顯示排序由後端查詢邏輯決定。
+- `vendor_profiles` 移除 `product_summary`，品牌商品改由 `vendor_products` 保存詳細資料。
+- `vendor_products` 的商品顯示依後端排序邏輯決定，移除商品時直接刪除資料。
 - `organizer_profiles` 新增 `organizer_name` 保存主辦方名稱；主辦方名稱不再使用 `user_profiles.name`。
 - `user_profiles` 移除 `name`，只保留共用聯絡人、電話、Email、縣市、地區與地址等資料。
 - `user_profiles.address` 只保存詳細地址原文，不負責組合縣市與地區；後端回傳主辦資料時也直接回傳此欄位。
@@ -162,7 +170,7 @@
 - `user_profiles`：攤主與主辦方共用聯絡資料，包含 contact_name、contact_phone、contact_email、地址等資料。
 - `vendor_profiles`：攤主品牌專屬資料，包含品牌名稱、分類、頭像、封面、社群連結、品牌簡述與品牌介紹
 - `organizer_profiles`：主辦方專屬資料，包含主辦方名稱、公司名稱、統一編號與服務時間
-- `vendor_products`：品牌商品，關聯 `vendor_profiles`，可用 `is_featured` 標記特色商品
+- `vendor_products`：品牌商品，關聯 `vendor_profiles`
 - `admin_profiles`：管理員資料，關聯 `users`，保存管理員顯示名稱
 - `market_events`：市集活動，包含活動時間、報名時間、活動共用攤位寬度與長度、固定三種交通資訊、活動流程狀態與活動建立時間
 - `event_unpublish_requests`：活動下架申請，記錄主辦方申請原因與管理員審核結果
@@ -208,7 +216,7 @@
 - `GET /api/brands/{id}`
 - `GET /api/brands/scroll-options`
 
-資料內容包含 50 筆品牌、每品牌 10 筆商品、每品牌 2-3 筆特色商品、10 筆測試市集活動，以及每個品牌參與所有測試活動的報名資料。活動時間刻意分成已結束、進行中與未開始，方便驗證品牌詳情中的歷史參與市集只統計 `end_at < now` 的活動。
+資料內容包含 50 筆品牌、每品牌 10 筆商品、10 筆測試市集活動，以及每個品牌參與所有測試活動的報名資料。活動時間刻意分成已結束、進行中與未開始，方便驗證品牌詳情中的歷史參與市集只統計 `end_at < now` 的活動。
 
 ### `test11.sql`
 
