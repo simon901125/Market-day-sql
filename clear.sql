@@ -6,8 +6,8 @@ GO
    seed data such as MD*, T2-*, MD0101, and T5-* rows.
 
    This script keeps tables, indexes, constraints, triggers,
-   and extended properties. It only deletes table rows and
-   reseeds identity columns back to 0.
+   and extended properties. It deletes business/test rows,
+   resets identities, then restores the seven system categories.
    ========================================================= */
 
 SET NOCOUNT ON;
@@ -68,6 +68,17 @@ BEGIN TRY
     DBCC CHECKIDENT ('dbo.request_logs', RESEED, 0) WITH NO_INFOMSGS;
     DBCC CHECKIDENT ('dbo.users', RESEED, 0) WITH NO_INFOMSGS;
     DBCC CHECKIDENT ('dbo.categories', RESEED, 0) WITH NO_INFOMSGS;
+
+    /* Restore the fixed category options required by the application. */
+    INSERT INTO dbo.categories (name, slug, is_active)
+    VALUES
+        (N'餐飲美食', N'food', 1),
+        (N'文創手作', N'handmade', 1),
+        (N'親子家庭', N'family', 1),
+        (N'寵物生活', N'pet-life', 1),
+        (N'植物選物', N'plants', 1),
+        (N'服飾配件', N'fashion-accessories', 1),
+        (N'玩具選物', N'toys', 1);
 
     COMMIT TRANSACTION;
 
