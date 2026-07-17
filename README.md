@@ -40,7 +40,7 @@
 - 新增 `application_review_notes`，以 `application_id` 關聯報名，並用 `review_note`、`review_note_detail` 保存一組退件原因與詳細說明。
 - `vendor_profiles` 新增 `brand_summary` 保存品牌簡述，原 `brand_description` 語意調整為品牌介紹。
 - `vendor_profiles` 新增 `brand_name` 保存品牌名稱；品牌名稱不再使用 `user_profiles.name`。
-- `vendor_profiles` 移除 `brand_type`，品牌類型統一由 `category_id` 關聯 `categories` 取得。
+- `vendor_profiles` 與 `market_events` 皆透過多對多關聯表連結 `categories`。
 - `vendor_profiles` 移除 `product_summary`，品牌商品改由 `vendor_products` 保存詳細資料。
 - `vendor_products` 的商品顯示依後端排序邏輯決定，移除商品時直接刪除資料。
 - `organizer_profiles` 新增 `organizer_name` 保存主辦方名稱；主辦方名稱不再使用 `user_profiles.name`。
