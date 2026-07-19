@@ -7,7 +7,8 @@ GO
 
    This script keeps tables, indexes, constraints, triggers,
    and extended properties. It deletes business/test rows,
-   resets identities, then restores the seven system categories.
+   resets identities, then restores the default admin account
+   and the seven system categories.
    ========================================================= */
 
 SET NOCOUNT ON;
@@ -68,6 +69,31 @@ BEGIN TRY
     DBCC CHECKIDENT ('dbo.request_logs', RESEED, 0) WITH NO_INFOMSGS;
     DBCC CHECKIDENT ('dbo.users', RESEED, 0) WITH NO_INFOMSGS;
     DBCC CHECKIDENT ('dbo.categories', RESEED, 0) WITH NO_INFOMSGS;
+
+    /* Restore the default administrator account. Password: a12345678 */
+    INSERT INTO dbo.users (
+        role,
+        email,
+        password_hash,
+        provider,
+        status,
+        isLogin,
+        email_verified_at
+    )
+    VALUES (
+        'ADMIN',
+        'admin@marketday.local',
+        '$2a$10$mbBnbPGQHnFgV4OnLqsMVO2ootBD99oXGZPZr6RIMLNsWlvwy5.rC',
+        'LOCAL',
+        'ACTIVE',
+        0,
+        SYSDATETIME()
+    );
+
+    INSERT INTO dbo.admin_profiles (user_id, admin_name)
+    SELECT id, N'系統管理員'
+    FROM dbo.users
+    WHERE email = 'admin@marketday.local';
 
     /* Restore the fixed category options required by the application. */
     INSERT INTO dbo.categories (name, slug, is_active)

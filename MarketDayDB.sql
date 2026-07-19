@@ -1027,7 +1027,7 @@ BEGIN
     VALUES (
         'ADMIN',
         'admin@marketday.local',
-        '$2a$10$jZ5SinwJD56C7PQX8Kj2wORspIPscc5H9Nf9nE1RcKj1j7/.o4QqW',
+        '$2a$10$mbBnbPGQHnFgV4OnLqsMVO2ootBD99oXGZPZr6RIMLNsWlvwy5.rC',
         'LOCAL',
         'ACTIVE',
         0,
