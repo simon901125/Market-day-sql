@@ -6,6 +6,15 @@
 
 > 更新日誌請依日期與 branch 分區：日期使用 `###`，branch 使用 `####`，越近的更新放越上面，避免不同分支的更動混在同一段。
 
+### 2026-07-19
+
+#### simon branch
+
+- 將通知去重 migration 正式整合至 `MarketDayDB.sql`：`notifications` 新增可空的 `dedup_key`，並建立 `UX_notifications_dedup_key` filtered unique index，避免 API 重試或併發請求建立重複通知。
+- `notifications.target_type` 新增 `EVENT_UNPUBLISH_REQUEST`，可將通知關聯至活動下架申請。
+- `refunds.application_id` 改由 `UX_refunds_application` 唯一索引約束，防止同一報名在併發操作下建立多筆退款流程。
+- 上述結構已納入完整建庫檔，不再保留或另外執行 `migration_notification_dedup.sql`。
+
 ### 2026-07-14
 
 #### simon branch
