@@ -267,6 +267,8 @@ CREATE TABLE dbo.market_events
     stall_length DECIMAL(6,2) NULL,
     base_fee DECIMAL(10,2) NOT NULL,
     deposit_amount DECIMAL(10,2) NOT NULL CONSTRAINT DF_market_events_deposit_amount DEFAULT 0,
+    payment_account VARCHAR(100) NULL,
+    payment_received BIT NOT NULL CONSTRAINT DF_market_events_payment_received DEFAULT 0,
     traffic_info_driving NVARCHAR(MAX) NULL,
     traffic_info_bus NVARCHAR(MAX) NULL,
     traffic_info_metro NVARCHAR(MAX) NULL,
@@ -861,6 +863,8 @@ EXEC dbo.usp_add_column_description N'market_events', N'stall_width', N'本活�
 EXEC dbo.usp_add_column_description N'market_events', N'stall_length', N'本活動固定攤位長度';
 EXEC dbo.usp_add_column_description N'market_events', N'base_fee', N'基本攤位費';
 EXEC dbo.usp_add_column_description N'market_events', N'deposit_amount', N'每攤保證金';
+EXEC dbo.usp_add_column_description N'market_events', N'payment_account', N'主辦方付款帳號，供管理員統整並轉交活動款項';
+EXEC dbo.usp_add_column_description N'market_events', N'payment_received', N'主辦方是否已確認收到活動全部款項';
 EXEC dbo.usp_add_column_description N'market_events', N'traffic_info_driving', N'開車交通資訊';
 EXEC dbo.usp_add_column_description N'market_events', N'traffic_info_bus', N'公車交通資訊';
 EXEC dbo.usp_add_column_description N'market_events', N'traffic_info_metro', N'捷運交通資訊';
